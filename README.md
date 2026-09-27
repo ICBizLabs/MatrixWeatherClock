@@ -65,16 +65,17 @@ arrives, and is configured entirely through its own web interface.
 | [Seengreat RGB Matrix HUB75 S3](https://seengreat.com/wiki/214/rgb-matrix-hub75-s3) (SKU 260612) | ESP32-S3-WROOM-1-N16R8: 16 MB flash, 8 MB PSRAM, native USB-C, ES8311 codec, ES7210 mic ADC, speaker amp, PCF85063 RTC, PCA9557 thumb-wheel switch, micro-SD. [Controller used in this build (Amazon)](https://www.amazon.com/dp/B0H69DTZVH) |
 | P4 64x32 HUB75 panel (P4-256x128-2121-A5 or similar) | 1/16 scan, 3-in-1 SMD, 256x128 mm. Any 64x32 1/16-scan panel should work. [Panel used in this build (AliExpress)](https://s.click.aliexpress.com/e/_c3olggmN) |
 | 5 V power supply | The board has a second USB-C and a VH-4P screw terminal for panel power (5 V / 4 A max). A 64x32 panel at full white can draw close to that |
-| Indoor sensor (optional) | Bosch BME680 / BME688 breakout on the 4-pin I2C connector, for indoor temperature, humidity, pressure and air quality. [Sensor used in this build (AliExpress)](https://s.click.aliexpress.com/e/_c3MgQK3j) — boards sold as "BME680" are usually BME688s; the firmware reads register 0xF0 and handles either |
+| Indoor sensor (optional) | Bosch BME680 / BME688 breakout for indoor temperature, humidity, pressure and air quality. [Sensor used in this build (AliExpress)](https://s.click.aliexpress.com/e/_c3MgQK3j) — boards sold as "BME680" are usually BME688s; the firmware reads register 0xF0 and handles either. Solder the supplied pin header on: a header pushed in loose makes intermittent contact |
+| JST SH 1.0 mm 4-pin cable | Needed to reach the board's I2C connector from the sensor. [Pigtail set used in this build (AliExpress)](https://s.click.aliexpress.com/e/_c315Qj0v) — pick the 4-pin, 100 mm one and wire it by the board's labels (3V3 GND IO1 IO2), not by wire colour |
 | Speaker (optional) | 4-8 ohm on the board's speaker connector, needed for the chime |
 | CR1220 / LIR battery (optional) | On the SH1.0 connector to keep the RTC running without power |
 
 **Where the parts came from**
 
-| Controller | Panel | Indoor sensor |
-|---|---|---|
-| <a href="https://www.amazon.com/dp/B0H69DTZVH"><img src="https://m.media-amazon.com/images/I/61VzwaWpPfL._AC_SL350_.jpg" width="240" alt="Seengreat RGB Matrix HUB75 S3 controller board on Amazon"></a> | <a href="https://s.click.aliexpress.com/e/_c3olggmN"><img src="https://ae-pic-a1.aliexpress-media.com/kf/S68fe89304a9f4e888e5167fd0c0d50d3P.jpg_350x350.jpg" width="240" alt="P4 64x32 HUB75 LED matrix panel on AliExpress"></a> | <a href="https://s.click.aliexpress.com/e/_c3MgQK3j"><img src="https://ae-pic-a1.aliexpress-media.com/kf/Sbb4f0bd55a9b426baef21f956d59ef07K.jpg_350x350.jpg" width="240" alt="BME680 / BME688 environment sensor breakout on AliExpress"></a> |
-| [Seengreat RGB Matrix HUB75 S3 (Amazon)](https://www.amazon.com/dp/B0H69DTZVH) | [P4 256x128 mm 64x32 module (AliExpress)](https://s.click.aliexpress.com/e/_c3olggmN) | [BME680 / BME688 breakout (AliExpress)](https://s.click.aliexpress.com/e/_c3MgQK3j) |
+| Controller | Panel | Indoor sensor | I2C cable |
+|---|---|---|---|
+| <a href="https://www.amazon.com/dp/B0H69DTZVH"><img src="https://m.media-amazon.com/images/I/61VzwaWpPfL._AC_SL350_.jpg" width="190" alt="Seengreat RGB Matrix HUB75 S3 controller board on Amazon"></a> | <a href="https://s.click.aliexpress.com/e/_c3olggmN"><img src="https://ae-pic-a1.aliexpress-media.com/kf/S68fe89304a9f4e888e5167fd0c0d50d3P.jpg_350x350.jpg" width="190" alt="P4 64x32 HUB75 LED matrix panel on AliExpress"></a> | <a href="https://s.click.aliexpress.com/e/_c3MgQK3j"><img src="https://ae-pic-a1.aliexpress-media.com/kf/Sbb4f0bd55a9b426baef21f956d59ef07K.jpg_350x350.jpg" width="190" alt="BME680 / BME688 environment sensor breakout on AliExpress"></a> | <a href="https://s.click.aliexpress.com/e/_c315Qj0v"><img src="https://ae-pic-a1.aliexpress-media.com/kf/H6cff59b87fcf4a89bd871acd1123f220Y.jpg_350x350.jpg" width="190" alt="JST SH 1.0 mm pigtail cables on AliExpress"></a> |
+| [Seengreat RGB Matrix HUB75 S3 (Amazon)](https://www.amazon.com/dp/B0H69DTZVH) | [P4 256x128 mm 64x32 module (AliExpress)](https://s.click.aliexpress.com/e/_c3olggmN) | [BME680 / BME688 breakout (AliExpress)](https://s.click.aliexpress.com/e/_c3MgQK3j) | [JST SH 1.0 mm 4-pin pigtail (AliExpress)](https://s.click.aliexpress.com/e/_c315Qj0v) |
 
 ### Wiring
 
@@ -389,7 +390,10 @@ the predictions come from CO-OPS; `/api/status` carries the same numbers with ep
 Any board with a Bosch **BME280** (temperature, humidity, pressure), **BMP280** (no humidity) or **BME680 / BME688**
 works (the two 68x variants are told apart at start-up and the Status tab names the one it found; the
 [breakout used in this build](https://s.click.aliexpress.com/e/_c3MgQK3j) is one of the purple BME688 boards sold as
-BME680): wire 3.3 V, GND, SDA to GPIO 1 and SCL to GPIO 2 of the controller (the same bus as the RTC and the codec). The
+BME680): wire 3.3 V, GND, SDA to GPIO 1 and SCL to GPIO 2 of the controller (the same bus as the RTC and the codec).
+The 4-pin connector on the left edge of the board, marked 3V3 GND IO1 IO2, is that bus; it takes a
+[JST SH 1.0 mm 4-pin cable](https://s.click.aliexpress.com/e/_c315Qj0v). Wire it by those labels rather than by colour:
+Qwiic and STEMMA QT cables use the same plug but carry GND and 3V3 the other way round. The
 firmware finds the sensor at 0x76 or 0x77 by its chip ID at boot (and keeps looking every 30 seconds, so it can be
 plugged in while the clock runs), adds an **indoor** page to the rotation (a house icon,
 temperature, humidity and pressure) and shows the values on the Status tab with a three-hour chart. Keep the sensor a
