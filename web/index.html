@@ -188,9 +188,10 @@ progress{width:100%;height:10px}
   <label>Frame time (ms)<input data-k="radar.frame_ms" type="number" min="100" max="2000"></label>
   <label>Pause on the newest frame (ms)<input data-k="radar.hold_ms" type="number" min="0" max="5000"></label>
   <label>Fetch a new frame every (minutes)<input data-k="radar.refresh_min" type="number" min="2" max="30"></label>
+  <label>Radar data<select data-k="radar.source"><option value="nowcoast">NOAA nowCOAST MRMS mosaic (quality controlled)</option><option value="mesonet">Iowa Mesonet NEXRAD composite (unfiltered)</option></select></label>
   <label>Base map under the echoes<select data-k="radar.base_map"><option value="both">Coastline and water tint</option><option value="coast">Coastline only</option><option value="landwater">Water tint only</option><option value="none">None</option></select></label>
  </div><div class="row"><button class="btn" onclick="save('display')">Save</button><span class="msg" id="msg-radar-cfg"></span></div>
- <p class="msg">NEXRAD base reflectivity composites from the Iowa Environmental Mesonet (Iowa State University), cropped by their map server to the panel around your location; the newest image plus the 5 to 50 minutes-ago layers make an eleven-frame loop. A blinking cross marks home. The base map (coastline, land and water from NASA GIBS) is fetched once for your location and radius. US coverage only for the radar itself.</p></div>
+ <p class="msg">Radar from NOAA's nowCOAST map service: the MRMS reflectivity mosaic with birds, insects and clutter filtered out, the same product weather apps use. The unfiltered Iowa Mesonet NEXRAD composite stays available as an alternative. Either is cropped by the map server to the panel around your location; the newest image plus the 5 to 50 minutes-ago frames make an eleven-frame loop. A blinking cross marks home. The base map (coastline, land and water from NASA GIBS) is fetched once for your location and radius. US coverage only for the radar itself.</p></div>
 </section>
 
 <section id="alarms">

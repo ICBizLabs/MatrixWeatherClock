@@ -215,6 +215,7 @@ struct RadarConfig {              // animated NEXRAD loop from the Iowa Environm
   uint8_t show_sec = 12;          // how long the radar screen stays
   uint8_t refresh_min = 5;        // new composite every 5 minutes
   uint8_t base_map = 3;           // underlay from NASA GIBS: bit 0 = coastline, bit 1 = land / water tint (3 = both, 0 = none)
+  uint8_t source = 0;             // 0 = NOAA nowCOAST MRMS mosaic (quality controlled), 1 = Iowa Mesonet NEXRAD n0r composite (unfiltered)
 };
 
 constexpr uint8_t MAX_REMOTE_BUTTONS = 24;

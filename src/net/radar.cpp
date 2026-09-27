@@ -14,6 +14,9 @@
 namespace radar {
   namespace {
     constexpr const char* BASE = "https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&STYLES=&SRS=EPSG:4326&FORMAT=image/png&TRANSPARENT=FALSE&BGCOLOR=0x000000";
+    // NOAA nowCOAST: the MRMS (Multi-Radar Multi-Sensor) base reflectivity mosaic, quality controlled, so birds, insects,
+    // ground and sea clutter are removed; WMS 1.3.0 with a time dimension (nearestValue), CRS:84 keeps lon/lat order
+    constexpr const char* NOWCOAST = "https://nowcoast.noaa.gov/geoserver/weather_radar/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=base_reflectivity_mosaic&STYLES=&CRS=CRS:84&FORMAT=image/png&TRANSPARENT=FALSE&BGCOLOR=0x000000";
     constexpr const char* GIBS = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&STYLES=&SRS=EPSG:4326&FORMAT=image/png&TRANSPARENT=TRUE";
     constexpr size_t MAX_PNG = 24 * 1024;
     constexpr uint32_t DUP_RETRY_MS = 60000UL;
@@ -132,17 +135,31 @@ namespace radar {
       }
     }
 
-    String url(const AppConfig& cfg, const char* layerSuffix) {
-      String u = BASE;
-      u += "&LAYERS=nexrad-n0r"; u += layerSuffix;
+    // minutesAgo 0 = the newest composite. Mesonet keeps fixed -m05m..-m50m layers; nowCOAST takes an ISO time and
+    // snaps to the nearest scan it has.
+    String url(const AppConfig& cfg, uint8_t minutesAgo) {
+      String u;
+      if (cfg.radar.source == 1) {
+        u = BASE;
+        u += "&LAYERS=nexrad-n0r";
+        if (minutesAgo) { char sfx[8]; snprintf(sfx, sizeof(sfx), "-m%02um", minutesAgo); u += sfx; }
+      } else {
+        u = NOWCOAST;
+        if (minutesAgo) {
+          time_t t = time(nullptr) - (time_t)minutesAgo * 60;
+          struct tm g; gmtime_r(&t, &g);
+          char iso[24]; strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%SZ", &g);
+          u += "&TIME="; u += iso;
+        }
+      }
       u += "&BBOX="; u += bbox(cfg);
       u += "&WIDTH="; u += W; u += "&HEIGHT="; u += H;
       return u;
     }
 
-    bool fetchLayer(const AppConfig& cfg, const char* suffix, String& err) {
+    bool fetchLayer(const AppConfig& cfg, uint8_t minutesAgo, String& err) {
       size_t got = 0;
-      if (!fetchPng(url(cfg, suffix), err, got)) return false;   // HTTP/1.0: body ends when the server closes
+      if (!fetchPng(url(cfg, minutesAgo), err, got)) return false;   // HTTP/1.0: body ends when the server closes
       memset(work, 0, FRAME_PX * 2);
       int rc = png->openRAM(pngBuf, (int)got, drawLine);
       if (rc != PNG_SUCCESS) { err = "png open failed"; return false; }
@@ -190,7 +207,7 @@ namespace radar {
     nextFetch = millis() + 20000UL;
   }
 
-  void applyConfig() { resetRequested = true; baseValid = false; baseNext = 0; net_task::kick(net_task::JOB_RADAR); }
+  void applyConfig() { resetRequested = true; baseValid = false; baseNext = 0; nextFetch = 0; net_task::kick(net_task::JOB_RADAR); }
   void requestRefresh() { refreshRequested = true; net_task::kick(net_task::JOB_RADAR); }
 
   bool due(const AppConfig& cfg, uint32_t now) {
@@ -212,17 +229,18 @@ namespace radar {
     const uint32_t period = (uint32_t)(cfg.radar.refresh_min ? cfg.radar.refresh_min : 5) * 60000UL;
     String err;
     bool ok = true;
+    if (cfg.radar.source == 0 && time(nullptr) < 1700000000) { nextFetch = now + 30000UL; return; }   // nowCOAST frames are addressed by time
     if (count == 0) {
-      // first fill: the 50..5 minutes-ago layers, then the current composite
-      static const char* const PAST[10] = { "-m50m", "-m45m", "-m40m", "-m35m", "-m30m", "-m25m", "-m20m", "-m15m", "-m10m", "-m05m" };
+      // first fill: the 50..5 minutes-ago frames, then the current composite
       for (int i = 0; i < 10 && ok; i++) {
-        if (!fetchLayer(cfg, PAST[i], err)) { ok = false; break; }
-        push(now - (uint32_t)(50 - 5 * i) * 60000UL);
+        const uint8_t ago = (uint8_t)(50 - 5 * i);
+        if (!fetchLayer(cfg, ago, err)) { ok = false; break; }
+        push(now - (uint32_t)ago * 60000UL);
         delay(400);   // let lwIP release the previous TLS socket before the next one
       }
-      if (ok && fetchLayer(cfg, "", err)) push(now); else ok = false;
+      if (ok && fetchLayer(cfg, 0, err)) push(now); else ok = false;
     } else {
-      if (fetchLayer(cfg, "", err)) {
+      if (fetchLayer(cfg, 0, err)) {
         bool same = false;
         if (take()) { same = memcmp(work, frames + (count - 1) * FRAME_PX, FRAME_PX * 2) == 0; give(); }
         if (same) { nextFetch = now + DUP_RETRY_MS; if (take()) { st.last_ok_ms = now; give(); } return; }   // composite not updated yet

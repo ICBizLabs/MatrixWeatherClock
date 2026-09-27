@@ -445,6 +445,13 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (!getNum(o, "hold_ms", r.hold_ms, t, err, 0, 5000)) return false;
     if (!getNum(o, "show_sec", r.show_sec, t, err, 4, 60)) return false;
     if (!getNum(o, "refresh_min", r.refresh_min, t, err, 2, 30)) return false;
+    JsonVariantConst rsrc = o["source"];
+    if (!rsrc.isNull()) {
+      const char* v = rsrc | "nowcoast";
+      if (!strcmp(v, "nowcoast")) r.source = 0; else if (!strcmp(v, "mesonet")) r.source = 1;
+      else { err = "radar.source: nowcoast or mesonet"; return false; }
+      t = true;
+    }
     JsonVariantConst bm = o["base_map"];
     if (!bm.isNull()) {
       const char* m = bm | "both";
@@ -676,6 +683,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["show_sec"] = c.radar.show_sec;
   o["refresh_min"] = c.radar.refresh_min;
   o["base_map"] = c.radar.base_map == 0 ? "none" : c.radar.base_map == 1 ? "coast" : c.radar.base_map == 2 ? "landwater" : "both";
+  o["source"] = c.radar.source == 1 ? "mesonet" : "nowcoast";
 
   JsonArray al = dst["alarms"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_ALARMS; i++) {

@@ -330,12 +330,15 @@ text (0 seconds = until cleared with `POST /api/message/clear` or the wheel push
 
 ## Weather radar
 
-The radar screen shows NEXRAD base reflectivity from the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/ogc/)
-map service (Iowa State University), which serves the national composite the NWS radars feed. The clock asks for a
-64x32 crop centred on your coordinates, 200 km wide by default, in the standard NWS colours on black: greens for light
-rain, yellow and orange for heavy rain, red and magenta for severe cores. The newest composite plus the 5 to 50
-minutes-ago layers make an eleven-frame loop, so the direction and speed of what is coming are obvious; after the first
-fill only the newest frame is fetched, every five minutes. A blinking cross marks home and the corner label counts the
+The radar screen shows the MRMS base reflectivity mosaic from NOAA's [nowCOAST](https://nowcoast.noaa.gov/) map
+service: the Multi-Radar Multi-Sensor product with quality control, so the evening bloom of birds and insects, ground
+and sea clutter are removed and what is left is rain, the same data the weather apps draw. The unfiltered NEXRAD
+composite from the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/ogc/) is available as an alternative
+on the Display tab. The clock asks for a 64x32 crop centred on your coordinates, 200 km wide by default, in the
+standard reflectivity colours on black: blues and greens for light rain, yellow and orange for heavy rain, red and
+magenta for severe cores. The newest mosaic plus the frames from 5 to 50 minutes ago make an eleven-frame loop, so the
+direction and speed of what is coming are obvious; after the first fill only the newest frame is fetched, every five
+minutes. A blinking cross marks home and the corner label counts the
 frame age down to "NOW".
 
 Under the echoes the clock draws a base map so the picture makes sense on a dry day: the coastline as a thin grey
@@ -514,6 +517,6 @@ ported from Espressif's esp-bsp codec component (Apache-2.0). Spoken announcemen
 [Piper](https://github.com/rhasspy/piper) (MIT) using the `en_US-ljspeech-medium` voice, trained on the public-domain
 [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) dataset. Weather data by Open-Meteo, alerts by the US National
 Weather Service. Radar composites from the Iowa Environmental Mesonet at Iowa State University (NEXRAD data by the NWS),
-decoded with [PNGdec](https://github.com/bitbank2/PNGdec) (Apache-2.0). Coastlines and the land/water mask under the radar
+and the MRMS mosaic from NOAA nowCOAST, decoded with [PNGdec](https://github.com/bitbank2/PNGdec) (Apache-2.0). Coastlines and the land/water mask under the radar
 come from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api)
 (Natural Earth coastlines, OpenStreetMap land/water data © OpenStreetMap contributors, ODbL).
