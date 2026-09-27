@@ -42,6 +42,8 @@ arrives, and is configured entirely through its own web interface.
   hearts or sparkles on the day.
 - **Pushbullet**: new weather alerts, nearby lightning and alarms pushed to your phone; pushes sent to the clock
   (from the phone app, IFTTT or scripts) scroll on the panel.
+- **Tides**: the next high and low water from NOAA's tide predictions for the station you pick, with a rising or
+  falling arrow and the height right now, as a page and on the Status tab.
 - **Animated weather radar**: an eleven-frame NEXRAD loop of the last 50 minutes around your location, full screen
   on the panel with a blinking home marker. It takes turns with the forecast screens and comes back every couple of
   page cycles while rain or snow is nearby.
@@ -196,6 +198,8 @@ timer, message, holiday themes, night mode, test pattern and update. Individual 
 | Test pattern | Radar loop: coastline, water tint, home cross (real data, dry day) | Indoor page: temperature, humidity, pressure with trend arrows |
 | <img src="docs/screens/gif/air.gif" width="256" alt="Air quality page (BME680)"> | <img src="docs/screens/gif/baro.gif" width="256" alt="Barometer page with Zambretti forecast"> |
 | Air quality page: score, trend, good / fair / poor (BME680) | Barometer page: pressure, tendency and the Zambretti forecast |
+| <img src="docs/screens/gif/tide.gif" width="256" alt="Tide page: next high and low, rising arrow, height now"> |
+| Tide page: next high and low water, rising / falling arrow, height right now |
 
 ### Weather alert screens
 
@@ -288,7 +292,7 @@ IP address once online). After every WiFi connection the IP address is shown for
 The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
 thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
 storm watch, an alarm, a running and a finished timer, a message, the holiday themes, night mode, the indoor sensor,
-air-quality and barometer pages and a radar loop with a synthetic storm. It uses made-up
+air-quality, barometer and tide pages and a radar loop with a synthetic storm. It uses made-up
 data, turns itself off after the chosen number of minutes, and the wheel push ends it early. It is silent unless
 "with sounds" is ticked, in which case the alert, lightning, alarm, timer and message scenarios play their chimes even
 during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
@@ -354,6 +358,18 @@ The loop takes its turn with the forecast and hourly screens every few page cycl
 centre of the picture or the current conditions report rain or snow it comes back every two page cycles. The Status
 tab plays the same loop enlarged with a "Show on the clock" button, `POST /api/show` with `screen=radar` does the same,
 and the Display tab sets radius, timing and how often it appears. US coverage only, like the NWS alerts.
+
+## Tides
+
+Pick a NOAA tide station on the Location & Weather tab: *Find nearest stations* downloads NOAA's station list in
+your browser and lists the six closest to your coordinates, and one click fills the ID in. The clock then fetches
+the high and low water predictions (datum MLLW) for the next two days a few times a day, in feet or metres following
+your units. The **tide** page shows the next two extremes in order, high in the "high" colour and low in the "low"
+colour, an arrow for rising or falling, and the estimated height at the moment (a cosine between the neighbouring
+extremes, the shape real tides follow closely). The Status tab lists the coming highs and lows. US coasts only, since
+the predictions come from CO-OPS; `/api/status` carries the same numbers with epoch times for scripts.
+
+<img src="docs/screens/gif/tide.gif" width="384" alt="Tide page">
 
 ## Indoor sensor
 
@@ -474,6 +490,7 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweat
 | Indoor sensor "not detected" | the Status tab's Indoor card lists the I2C addresses seen and has a *Scan again* button; a BME280/BME680 answers at 0x76 or 0x77. Use the 4-pin connector on the left edge (3V3 GND IO1 IO2), SDA to IO1, SCL to IO2, wired by label (Qwiic cables have GND and 3V3 the other way round). The clock also looks for a sensor every 30 s, so no reboot is needed |
 | Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Location & Weather tab |
 | Sounds are fuzzy or distorted | Volume 100 % is the codec's full scale; the small speaker distorts near the top, so try 50-70 %. Firmware before 0.5.1 applied digital gain above 75 %, which clipped: update |
+| A page in the rotation never shows | sensor and tide pages appear only while their data exists; the panel skips them otherwise |
 | Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 4 MB of free flash), check `/api/log` for `voice:` lines |
 | Keys do nothing | Status tab shows whether the PCA9557 expander was found; `/api/log` prints raw key states |
 
@@ -516,7 +533,7 @@ AsyncTCP](https://github.com/ESP32Async), [ArduinoJson](https://arduinojson.org/
 ported from Espressif's esp-bsp codec component (Apache-2.0). Spoken announcements are rendered with
 [Piper](https://github.com/rhasspy/piper) (MIT) using the `en_US-ljspeech-medium` voice, trained on the public-domain
 [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) dataset. Weather data by Open-Meteo, alerts by the US National
-Weather Service. Radar composites from the Iowa Environmental Mesonet at Iowa State University (NEXRAD data by the NWS),
+Weather Service. Tide predictions by NOAA CO-OPS. Radar composites from the Iowa Environmental Mesonet at Iowa State University (NEXRAD data by the NWS),
 and the MRMS mosaic from NOAA nowCOAST, decoded with [PNGdec](https://github.com/bitbank2/PNGdec) (Apache-2.0). Coastlines and the land/water mask under the radar
 come from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api)
 (Natural Earth coastlines, OpenStreetMap land/water data © OpenStreetMap contributors, ODbL).

@@ -21,6 +21,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | GET | `/api/remote` | infrared receiver state: `{enabled, pin, received, learning, last_code, last_proto, last_ms, last_age_s}` |
 | POST | `/api/remote/learn` | record the next received code without executing it (the web UI's Learn button) |
 | GET | `/remote` | the phone remote page |
+| POST | `/api/tide/refresh` | fetch the tide predictions now; `/api/status.tide` has `{enabled, valid, station, unit, rising, height, next_high {t, h}, next_low {t, h}, extremes[]}` with epoch times |
 | GET | `/api/radar` | radar loop state: `{enabled, frames, error, echo_near, echo_pct, base, last_ok_age_s, age_min[]}` (`base_map`: `none`, `coast`, `landwater`, `both`; `source`: `nowcoast` (MRMS, quality controlled) or `mesonet` (unfiltered NEXRAD composite)) |
 | GET | `/api/radar/frame?i=N` | frame N (0 = oldest) as raw RGB565 little-endian 64x32 (headers `X-Frame-Size`, `X-Frame-Age-Min`) |
 | GET | `/api/radar/base` | base map mask, one byte per pixel (bit 0 water, bit 1 land, bit 2 coastline), 64x32 |
@@ -68,6 +69,7 @@ Configuration keys and defaults:
                   "notify_alarms": false, "notify_air": true, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
   "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixWeatherClock/manifest.json", "check_hours": 6 },
   "radar":    { "enabled": true, "radius_km": 100, "every_n_cycles": 4, "show_when_precip": true, "precip_every_n_cycles": 2, "frame_ms": 350, "hold_ms": 1500, "show_sec": 12, "refresh_min": 5, "base_map": "both", "source": "nowcoast" },
+  "tide":     { "enabled": true, "auto_page": true, "station": "8727012", "station_name": "Pithlachascotee River, FL", "unit": "auto", "refresh_hours": 6 },
   "remote":   { "enabled": true, "pin": 44, "buttons": [ { "code": "0x00FF629D", "action": "next_page" }, "... up to 24" ] },
   "indoor":   { "enabled": true, "auto_page": true, "sample_sec": 10, "temp_offset": 0, "humidity_offset": 0, "altitude_m": -1, "sea_level": true, "pressure_unit": "auto", "trend_min": 60, "pressure_trend_min": 180,
                 "gas": true, "air_fair_below": 80, "air_poor_below": 60, "air_alert": true, "air_alert_min": 60 },
@@ -75,7 +77,7 @@ Configuration keys and defaults:
   "alarms":   [ { "enabled": false, "time": "07:00", "days": "1111100", "chime": "triple_beep", "label": "" }, "... up to 4" ] }
 ```
 
-Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`, `indoor` (BME280/BME680 readings with trend arrows), `air` (BME680 air-quality score), `baro` (pressure and Zambretti forecast). Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
+Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`, `indoor` (BME280/BME680 readings with trend arrows), `air` (BME680 air-quality score), `baro` (pressure and Zambretti forecast), `tide` (next high and low water). Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
 `Extreme`. Chimes: `none`, `two_tone`, `triple_beep`, `chirp`, `alarm_beeps`, `doorbell`, `arpeggio`, `sonar`, `sos`, `siren_hilo`, `siren_wail`,
 `siren_yelp`, `nws_1050`, `eas_attention`, `eas_full`. `audio.chime_extreme` is used for Extreme alerts, `audio.chime` for everything else. `audio.speech` controls the spoken announcements
 (the event name of a new alert, "Lightning nearby", "Alarm" / "Timer finished", demo scenario names; `repeat` 1..3); an alert event without

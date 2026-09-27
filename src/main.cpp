@@ -24,6 +24,7 @@
 #include "net/updater.h"
 #include "net/voice_pack.h"
 #include "net/radar.h"
+#include "net/tide.h"
 #include "net/shared_state.h"
 #include "net/alert_store.h"
 #include "net/wifi_manager.h"
@@ -94,6 +95,7 @@ void setup() {
   pushbullet::begin();
   updater::begin();
   radar::begin();
+  tide::begin();
 
   i2c_bus::begin();
   const i2c_bus::Map& i2c = i2c_bus::identify();
@@ -152,6 +154,18 @@ void loop() {
   if (now - lastSecond >= 1000) {
     lastSecond = now;
     alerts::expire(time(nullptr));
+    {
+      static bool tidePageAdded = false;
+      tide::Data td;
+      if (!tidePageAdded && g_cfg.tide.auto_page && tide::get(td)) {
+        tidePageAdded = true;
+        app::cfgLock();
+        bool has = false;
+        for (uint8_t i = 0; i < g_cfg.display.npages; i++) if (g_cfg.display.pages[i] == PAGE_TIDE) has = true;
+        if (!has && g_cfg.display.npages < PAGE_COUNT) g_cfg.display.pages[g_cfg.display.npages++] = PAGE_TIDE;
+        app::cfgUnlock();
+      }
+    }
     if (env_sensor::present()) {
       WeatherData w;
       if (shared::getWeather(w)) {

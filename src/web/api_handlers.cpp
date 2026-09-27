@@ -17,6 +17,7 @@
 #include "audio/voice.h"
 #include "net/voice_pack.h"
 #include "net/radar.h"
+#include "net/tide.h"
 #include "util/zambretti.h"
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
@@ -187,6 +188,26 @@ namespace web {
       sp["available"] = vps.available_version;
       sp["error"] = vps.err;
       {
+        tide::Status ts = tide::status();
+        tide::Data td; tide::get(td);
+        JsonObject to = root["tide"].to<JsonObject>();
+        to["enabled"] = ts.enabled;
+        to["valid"] = td.valid;
+        to["station"] = td.station;
+        to["unit"] = td.metric ? "m" : "ft";
+        to["last_ok_age_s"] = ts.last_ok_ms ? (long)((millis() - ts.last_ok_ms) / 1000) : -1L;
+        to["error"] = ts.err;
+        tide::Extreme hi, lo; bool rising = false; float h = 0;
+        if (td.valid && tide::now(td, time(nullptr), hi, lo, rising, h)) {
+          to["rising"] = rising;
+          to["height"] = serialized(String(h, 2));
+          JsonObject nh = to["next_high"].to<JsonObject>(); nh["t"] = (long)hi.t; nh["h"] = serialized(String(hi.h, 2));
+          JsonObject nl = to["next_low"].to<JsonObject>(); nl["t"] = (long)lo.t; nl["h"] = serialized(String(lo.h, 2));
+        }
+        JsonArray all = to["extremes"].to<JsonArray>();
+        for (uint8_t i = 0; i < td.n; i++) { JsonObject e = all.add<JsonObject>(); e["t"] = (long)td.ex[i].t; e["h"] = serialized(String(td.ex[i].h, 2)); e["high"] = td.ex[i].high; }
+      }
+      {
         radar::Status rs = radar::status();
         JsonObject rd = root["radar"].to<JsonObject>();
         rd["enabled"] = rs.enabled;
@@ -310,7 +331,7 @@ namespace web {
       JsonArray reboot = root["reboot_required"].to<JsonArray>();
       struct { uint16_t bit; const char* name; bool reboot; } sections[] = {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
-        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false }, { CHG_REMOTE, "remote", false },
+        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false }, { CHG_REMOTE, "remote", false }, { CHG_TIDE, "tide", false },
         { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
@@ -528,6 +549,7 @@ namespace web {
       res->setLength();
       r->send(res);
     });
+    server.on("/api/tide/refresh", HTTP_POST, [](AsyncWebServerRequest* r) { tide::requestRefresh(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/radar/refresh", HTTP_POST, [](AsyncWebServerRequest* r) { radar::requestRefresh(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/indoor/rescan", HTTP_POST, [](AsyncWebServerRequest* r) {
       // the scan itself runs on the main loop (the I2C driver misreports acknowledges when driven from this task)

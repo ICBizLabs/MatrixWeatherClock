@@ -35,6 +35,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td{padding:4px 6px;bord
 .al{border-left:4px solid var(--warn);padding:6px 10px;margin:6px 0;background:#0d1014;border-radius:4px}
 .al.Extreme,.al.Severe{border-color:var(--bad)}.al.Minor{border-color:#e8d44d}.al small{color:var(--mut)}
 progress{width:100%;height:10px}
+.list{display:flex;flex-direction:column;gap:6px;margin-top:8px}.net{background:#0d1014;border:1px solid var(--line);border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;cursor:pointer}.net:hover{border-color:var(--acc)}
 </style>
 </head>
 <body>
@@ -60,6 +61,8 @@ progress{width:100%;height:10px}
   </div>
   <canvas id="inchart" width="900" height="220" style="width:100%;max-width:900px;background:#0b0e14;border-radius:6px;margin-top:8px"></canvas>
   <p class="msg" id="inchart-note">Last 3 hours, one point per minute. Arrows compare with the reading one hour ago (temperature, humidity, air) and three hours ago (pressure, scaled while the history is shorter).</p></div>
+ <div class="card" id="tide-card" hidden><h2>Tide</h2><table id="st-tide"></table>
+  <div class="row"><button class="btn sec" onclick="post('/api/tide/refresh')">Refresh predictions</button><span class="msg" id="msg-tide"></span></div></div>
  <div class="card"><h2>Demo mode</h2><div class="row"><label class="chk"><input type="checkbox" id="demo" onchange="setDemo(this.checked)">Cycle through demo screens</label>
   for <input id="demomin" type="number" min="1" max="720" value="10" style="width:80px"> minutes
   <label class="chk"><input type="checkbox" id="demosound" onchange="if($('#demo').checked)setDemo(true)">with sounds</label><span class="msg" id="msg-demo"></span></div>
@@ -124,6 +127,16 @@ progress{width:100%;height:10px}
  <div class="row"><button class="btn" onclick="save('weather')">Save</button>
   <button class="btn sec" onclick="post('/api/test/alert',{event:'Tornado Warning',severity:'Extreme',headline:'Test tornado warning until 5 PM',minutes:3})">Inject test alert (3 min)</button>
   <span class="msg" id="msg-weather"></span></div></div>
+ <div class="card"><h2>Tides (NOAA CO-OPS)</h2><div class="grid">
+  <label class="chk"><input data-k="tide.enabled" type="checkbox">Enabled</label>
+  <label class="chk"><input data-k="tide.auto_page" type="checkbox">Add the "tide" page automatically</label>
+  <label>NOAA station ID<input data-k="tide.station" maxlength="11" placeholder="8727012"></label>
+  <label>Station name<input data-k="tide.station_name" maxlength="39"></label>
+  <label>Heights in<select data-k="tide.unit"><option value="auto">Automatic (feet with °F, metres with °C)</option><option value="ft">feet</option><option value="m">metres</option></select></label>
+  <label>Refresh every (hours)<input data-k="tide.refresh_hours" type="number" min="1" max="24"></label>
+ </div><div class="row"><button class="btn" onclick="save('weather')">Save</button><button class="btn sec" onclick="findTideStations()">Find nearest stations</button><span class="msg" id="msg-tide-cfg"></span></div>
+ <div class="list" id="tide-stations"></div>
+ <p class="msg">High and low water predictions for one NOAA tide station (US coasts, Great Lakes excluded), datum MLLW. "Find nearest stations" downloads NOAA's station list in your browser and lists the six closest to the coordinates above; pick one and Save.</p></div>
  <div class="card"><h2>Indoor sensor (BME280 / BMP280 / BME680 on the I2C header)</h2><div class="grid">
   <label class="chk"><input data-k="indoor.enabled" type="checkbox">Enabled (auto-detected at 0x76 / 0x77)</label>
   <label class="chk"><input data-k="indoor.auto_page" type="checkbox">Add the "indoor" page automatically when a sensor is found</label>
@@ -162,7 +175,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
  </div></div>
  <div class="card"><h2>Pages</h2><div class="grid">
-  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor, air, baro)<input data-k="display.pages" data-list="1"></label>
+  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor, air, baro, tide)<input data-k="display.pages" data-list="1"></label>
   <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
   <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
   <label>Forecast every N page cycles<input data-k="display.forecast_every_n_cycles" type="number" min="1" max="20"></label>
@@ -394,6 +407,21 @@ async function radarStatus(R){const card=$('#radar-card');if(!card)return;const 
  if(!R.frames){$('#rd-label').textContent=R.error?'error: '+R.error:'fetching radar…';return;}
  if(Date.now()-radarAt<60000)return;radarAt=Date.now();try{const j=await(await fetch('/api/radar')).json();if(j.base==='ready'&&!radarBase){try{const rb=await fetch('/api/radar/base',{cache:'no-store'});if(rb.ok)radarBase=new Uint8Array(await rb.arrayBuffer());}catch(e){}}const fr=[];for(let i=0;i<j.frames;i++){const r=await fetch('/api/radar/frame?i='+i,{cache:'no-store'});fr.push(new Uint8Array(await r.arrayBuffer()));}
  radarFrames=fr;radarAges=j.age_min||[];if(radarIdx>=fr.length)radarIdx=0;if(!radarTimer)drawRadarFrame();}catch(e){}}
+function tideTime(t){const d=new Date(t*1000);return d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}
+function tideDay(t){const d=new Date(t*1000),n=new Date();return d.toDateString()===n.toDateString()?'today':d.toLocaleDateString([],{weekday:'short'})}
+function tideStatus(T){const card=$('#tide-card');if(!card)return;const on=T&&T.enabled;card.hidden=!on;if(!on)return;const t=$('#st-tide');t.innerHTML='';
+ const name=(cfg&&cfg.tide&&cfg.tide.station_name)||T.station;row(t,'Station',name+(T.station&&name!==T.station?' <small>('+T.station+')</small>':''));
+ if(!T.valid){row(t,'Predictions','<span class="warn">'+(T.error?T.error:'not fetched yet')+'</span>');return;}
+ if(T.next_high&&T.next_low){row(t,'Now',(T.rising?'<span class="ok">rising</span>':'<span class="warn">falling</span>')+', about '+T.height+' '+T.unit);
+  row(t,'Next high',tideTime(T.next_high.t)+' '+tideDay(T.next_high.t)+', '+T.next_high.h+' '+T.unit);row(t,'Next low',tideTime(T.next_low.t)+' '+tideDay(T.next_low.t)+', '+T.next_low.h+' '+T.unit);}
+ const now=Date.now()/1000;const list=(T.extremes||[]).filter(e=>e.t>now-3600*6).slice(0,8).map(e=>(e.high?'<b>High</b> ':'Low ')+tideTime(e.t)+' '+tideDay(e.t)+' ('+e.h+' '+T.unit+')');row(t,'Coming up',list.join('<br>'));
+ row(t,'Updated',T.last_ok_age_s>=0?ago(T.last_ok_age_s):'never');}
+async function findTideStations(){const lat=parseFloat($('[data-k="location.lat"]').value),lon=parseFloat($('[data-k="location.lon"]').value);if(isNaN(lat)||isNaN(lon))return say('tide-cfg','set the coordinates first','bad');
+ say('tide-cfg','downloading NOAA station list (2 MB)…');const box=$('#tide-stations');box.innerHTML='';
+ try{const j=await(await fetch('https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&units=english')).json();
+  const km=(a,b,c,d)=>111.32*Math.hypot(a-c,(b-d)*Math.cos(a*Math.PI/180));const near=j.stations.map(s=>({id:s.id,name:s.name,state:s.state,d:km(lat,lon,parseFloat(s.lat),parseFloat(s.lng))})).sort((a,b)=>a.d-b.d).slice(0,6);
+  near.forEach(s=>{const d=document.createElement('div');d.className='net';d.innerHTML='<span>'+s.name+', '+s.state+' <small>'+s.id+'</small></span><span>'+s.d.toFixed(1)+' km</span>';d.onclick=()=>{$('[data-k="tide.station"]').value=s.id;$('[data-k="tide.station_name"]').value=s.name+', '+s.state;say('tide-cfg','picked '+s.name+', now Save','ok')};box.appendChild(d)});
+  say('tide-cfg',near.length?'pick a station:':'no stations found','ok')}catch(e){say('tide-cfg','could not load the station list: '+e,'bad')}}
 const ARROW={'rising fast':'<span class="ok">&#x21C8;</span>','rising':'<span class="ok">&#x2191;</span>','falling':'<span class="warn">&#x2193;</span>','falling fast':'<span class="warn">&#x21CA;</span>','steady':'<span style="opacity:.6">&#x2192;</span>'};
 let inchartAt=0;
 async function rescanIndoor(){say('indoor-scan','scanning…');try{await fetch('/api/indoor/rescan',{method:'POST'});await new Promise(r=>setTimeout(r,1500));const s=await(await fetch('/api/status')).json();const I=s.indoor||{};
@@ -469,7 +497,7 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  const D=s.demo||{};if(document.activeElement!==$('#demo'))$('#demo').checked=!!D.on;say('demo',D.on?'showing: '+D.scenario+' · '+Math.ceil(D.remaining_s/60)+' min left':'','ok');
  row(y,'Forecast / hourly screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
  row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
- row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});indoorStatus(s.indoor,s.i2c);radarStatus(s.radar);remoteStatus(s.remote);row(y,'Radar',s.radar&&s.radar.enabled?(s.radar.frames+' frames'+(s.radar.newest_age_min>=0?', newest '+s.radar.newest_age_min+' min old':'')+(s.radar.echo_near?' <span class="warn">echoes nearby</span>':'')+(s.radar.error?' <span class="bad">'+s.radar.error+'</span>':'')):'off');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
+ row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});indoorStatus(s.indoor,s.i2c);tideStatus(s.tide);radarStatus(s.radar);remoteStatus(s.remote);row(y,'Radar',s.radar&&s.radar.enabled?(s.radar.frames+' frames'+(s.radar.newest_age_min>=0?', newest '+s.radar.newest_age_min+' min old':'')+(s.radar.echo_near?' <span class="warn">echoes nearby</span>':'')+(s.radar.error?' <span class="bad">'+s.radar.error+'</span>':'')):'off');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
  const U=s.update||{};const ut=$('#st-update');if(ut){ut.innerHTML='';row(ut,'Installed','v'+U.current);row(ut,'Latest',U.latest?'v'+U.latest+(U.state==='available'?' <span class="warn">new version available</span>':U.state==='up-to-date'?' <span class="ok">up to date</span>':''):'not checked yet');
   row(ut,'Status',U.state+(U.state==='downloading'?' '+U.progress+'%':'')+(U.error?' <span class="bad">'+U.error+'</span>':'')+(U.last_check_age_s>=0?' · checked '+ago(U.last_check_age_s):''));$('#installbtn').disabled=U.state!=='available';}
  if(U.state==='available')row(y,'Update','<span class="warn">v'+U.latest+' available</span> (Update tab)');

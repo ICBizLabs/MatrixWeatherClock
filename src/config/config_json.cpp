@@ -6,7 +6,7 @@
 
 namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
-  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro" };
+  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro", "tide" };
   const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
                                       "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
   constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
@@ -402,6 +402,32 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
   }
   c.indoor.temp_offset_c = c.weather.imperial ? c.indoor.temp_offset * 5.0f / 9.0f : c.indoor.temp_offset;
 
+  o = src["tide"];
+  if (!o.isNull()) {
+    t = false;
+    TideConfig& td = c.tide;
+    if (!getBool(o, "enabled", td.enabled, t, err)) return false;
+    if (!getBool(o, "auto_page", td.auto_page, t, err)) return false;
+    JsonVariantConst stn = o["station"];
+    if (!stn.isNull()) {
+      const char* v = stn | "";
+      for (const char* q = v; *q; q++) if (!isdigit((unsigned char)*q)) { err = "tide.station: NOAA station id (digits)"; return false; }
+      strlcpy(td.station, v, sizeof(td.station));
+      t = true;
+    }
+    JsonVariantConst sn = o["station_name"];
+    if (!sn.isNull()) { strlcpy(td.station_name, sn | "", sizeof(td.station_name)); t = true; }
+    JsonVariantConst un = o["unit"];
+    if (!un.isNull()) {
+      const char* v = un | "auto";
+      if (!strcmp(v, "auto")) td.unit = 0; else if (!strcmp(v, "ft")) td.unit = 1; else if (!strcmp(v, "m")) td.unit = 2;
+      else { err = "tide.unit: auto, ft or m"; return false; }
+      t = true;
+    }
+    if (!getNum(o, "refresh_hours", td.refresh_hours, t, err, 1, 24)) return false;
+    if (t) changed |= CHG_TIDE;
+  }
+
   o = src["remote"];
   if (!o.isNull()) {
     t = false;
@@ -657,6 +683,14 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["air_poor_below"] = c.indoor.air_poor_below;
   o["air_alert"] = c.indoor.air_alert;
   o["air_alert_min"] = c.indoor.air_alert_min;
+
+  o = dst["tide"].to<JsonObject>();
+  o["enabled"] = c.tide.enabled;
+  o["auto_page"] = c.tide.auto_page;
+  o["station"] = c.tide.station;
+  o["station_name"] = c.tide.station_name;
+  o["unit"] = c.tide.unit == 1 ? "ft" : c.tide.unit == 2 ? "m" : "auto";
+  o["refresh_hours"] = c.tide.refresh_hours;
 
   o = dst["remote"].to<JsonObject>();
   o["enabled"] = c.remote.enabled;

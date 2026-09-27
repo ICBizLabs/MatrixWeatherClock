@@ -7,7 +7,7 @@ enum class Severity : uint8_t { Unknown = 0, Minor, Moderate, Severe, Extreme };
 const char* severity_name(Severity s);
 bool        severity_parse(const char* s, Severity& out);
 
-enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_COUNT };
+enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_TIDE, PAGE_COUNT };
 const char* page_name(uint8_t id);
 bool        page_parse(const char* s, uint8_t& out);
 
@@ -227,6 +227,15 @@ struct RemoteConfig {             // infrared receiver module on one GPIO (see i
   uint8_t nbuttons = 0;
 };
 
+struct TideConfig {               // NOAA CO-OPS tide predictions (US coasts)
+  bool enabled = true;
+  bool auto_page = true;          // add the "tide" page to the rotation once predictions exist
+  char station[12] = "";          // CO-OPS station id, chosen on the Location & Weather tab; "" = off
+  char station_name[40] = "";
+  uint8_t unit = 0;               // 0 auto (feet with imperial units, metres otherwise), 1 feet, 2 metres
+  uint8_t refresh_hours = 6;
+};
+
 struct AppConfig {
   WifiConfig wifi;
   LocationConfig location;
@@ -243,13 +252,14 @@ struct AppConfig {
   IndoorConfig indoor;
   RadarConfig radar;
   RemoteConfig remote;
+  TideConfig tide;
   bool first_boot = true;
 };
 
 // Bit flags telling which sections a JSON merge touched (used to apply changes live / ask for a reboot)
 enum : uint16_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
-  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192, CHG_REMOTE = 16384
+  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192, CHG_REMOTE = 16384, CHG_TIDE = 32768
 };
 
 extern AppConfig g_cfg;

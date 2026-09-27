@@ -19,6 +19,7 @@
 #include "io/env_sensor.h"
 #include "util/zambretti.h"
 #include "net/radar.h"
+#include "net/tide.h"
 #include <esp_heap_caps.h>
 #include "time/time_service.h"
 #include "alarm/alarm.h"
@@ -326,8 +327,54 @@ namespace renderer {
       baroScroll.setText(up.c_str(), 15, now);
       baroScroll.draw(pc, 0, Y_L2, W, colDate(), now, true);
     }
+    tide::Data demoTide;
+    void buildDemoTide(time_t t) {
+      demoTide = tide::Data(); demoTide.valid = true; demoTide.metric = !g_cfg.weather.imperial; demoTide.n = 4;
+      strlcpy(demoTide.station, "8727012", sizeof(demoTide.station));
+      const float k = demoTide.metric ? 0.3048f : 1.0f;
+      demoTide.ex[0] = { t - 5 * 3600 - 20 * 60, 0.5f * k, false };
+      demoTide.ex[1] = { t + 1 * 3600 + 40 * 60, 3.8f * k, true };
+      demoTide.ex[2] = { t + 8 * 3600 + 5 * 60, 0.9f * k, false };
+      demoTide.ex[3] = { t + 14 * 3600 + 30 * 60, 3.6f * k, true };
+    }
+    void drawTidePage(Canvas& pc, const tide::Data& d, bool timeValid) {
+      classicFont(pc);
+      if (!g_cfg.tide.station[0] && !demo.on) { pc.drawTextCentered("SET TIDE", W / 2, Y_L1, C_GREY); pc.drawTextCentered("STATION", W / 2, Y_L2, C_GREY); return; }
+      tide::Extreme hi, lo; bool rising; float h;
+      if (!timeValid || !tide::now(d, time(nullptr), hi, lo, rising, h)) { pc.drawTextCentered("NO TIDE DATA", W / 2, Y_SINGLE, C_GREY); return; }
+      const tide::Extreme& first = hi.t < lo.t ? hi : lo;
+      const tide::Extreme& second = hi.t < lo.t ? lo : hi;
+      char t1[12], t2[12], l1[24], l2[24];
+      struct tm a, b; localtime_r(&first.t, &a); localtime_r(&second.t, &b);
+      fmtClock12(t1, sizeof(t1), a.tm_hour * 60 + a.tm_min);
+      fmtClock12(t2, sizeof(t2), b.tm_hour * 60 + b.tm_min);
+      snprintf(l1, sizeof(l1), "%s %s", first.high ? "HI" : "LO", t1);
+      snprintf(l2, sizeof(l2), "%s %s", second.high ? "HI" : "LO", t2);
+      const uint16_t cHi = Canvas::rgb(g_cfg.display.colors.hi), cLo = Canvas::rgb(g_cfg.display.colors.lo);
+      pc.drawText(l1, 2, Y_L1, first.high ? cHi : cLo);
+      pc.drawText(l2, 2, Y_L2, second.high ? cHi : cLo);
+      // rising / falling arrow after the first line
+      drawTrend(pc, (int16_t)(2 + pc.textWidth(l1) + 3), Y_L1 + 1, rising ? env_sensor::Trend::Rising : env_sensor::Trend::Falling);
+      // height now, tiny, bottom right
+      tinyFont(pc);
+      char hb[12];
+      snprintf(hb, sizeof(hb), "%.1f%s", h, d.metric ? "M" : "FT");
+      pc.drawTextRight(hb, W - 1, Y_L2 + 2, colText());
+      classicFont(pc);
+    }
+    // a page in the rotation is shown only when it has something to show
+    bool pageAvailable(uint8_t id) {
+      if (demo.on) return true;
+      switch (id) {
+        case PAGE_INDOOR: case PAGE_BARO: return env_sensor::present();
+        case PAGE_AIR: return env_sensor::hasGas();
+        case PAGE_TIDE: { tide::Data td; return g_cfg.tide.enabled && tide::get(td); }
+        default: return true;
+      }
+    }
     void drawPage(Canvas& pc, uint8_t id, const struct tm& lt, bool timeValid, uint32_t now) {
       classicFont(pc);
+      if (id == PAGE_TIDE) { tide::Data td; if (demo.on) td = demoTide; else tide::get(td); drawTidePage(pc, td, timeValid || demo.on); return; }
       if (id == PAGE_INDOOR) { drawIndoorPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
       if (id == PAGE_AIR) { drawAirPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
       if (id == PAGE_BARO) { drawBaroPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading(), now); return; }
@@ -453,7 +500,7 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
-    constexpr uint8_t DEMO_COUNT = 26;
+    constexpr uint8_t DEMO_COUNT = 27;
     void buildDemoRadar();
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
@@ -504,6 +551,7 @@ namespace renderer {
                  demo.indoor.valid = demo.indoor.has_humidity = demo.indoor.sea_level_known = true;
                  demo.indoor.temp_c = 21.0f; demo.indoor.humidity = 58; demo.indoor.pressure_hpa = 1004.6f; demo.indoor.sea_level_hpa = 1008.9f;
                  demo.indoor.t_press = env_sensor::Trend::FallingFast; demo.indoor.d_press = -3.8f; demo.indoor.span_min = 180; break;
+        case 26: demo.name = "tide";       demo.wx = demoWeather(1, true, 79, 78, 49, 9, 15, 250); demo.page = PAGE_TIDE; buildDemoTide(time(nullptr)); break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
@@ -511,7 +559,7 @@ namespace renderer {
       static const char* const SPOKEN[DEMO_COUNT] = {
         "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
         "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
-        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer" };
+        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer", "tide" };
       demo.lastRing = 0;
       if (demo.sound) {
         demo.soundPending = true;
@@ -772,6 +820,7 @@ namespace renderer {
     startTransition(g_cfg.display.pages[pageIdx < g_cfg.display.npages ? pageIdx : 0], showLightningPage, now);
     showLightningPage = false;
     pageIdx = (uint8_t)((pageIdx + 1) % (g_cfg.display.npages ? g_cfg.display.npages : 1));
+    for (uint8_t g = 0; g < g_cfg.display.npages && !pageAvailable(g_cfg.display.pages[pageIdx]); g++) pageIdx = (uint8_t)((pageIdx + 1) % g_cfg.display.npages);
     pageSince = now;
     if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
   }
@@ -891,6 +940,8 @@ namespace renderer {
         else {
           lightningTurn = false;
           pageIdx++;
+          // pages whose data is missing (sensor unplugged, no tide station) are skipped without breaking the cycle count
+          while (pageIdx < d.npages && !pageAvailable(d.pages[pageIdx])) pageIdx++;
           if (pageIdx >= d.npages) {
             pageIdx = 0;
             cyclesSinceFull++;

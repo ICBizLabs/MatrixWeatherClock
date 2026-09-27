@@ -25,7 +25,7 @@ EVENTS_FILE = ROOT / "tools" / "nws_event_types.json"
 NWS_TYPES_URL = "https://api.weather.gov/alerts/types"
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/"
 
-PACK_VERSION = 5
+PACK_VERSION = 6
 FORMAT = 2
 RATE = 22050
 MAGIC = b"MWCV"
@@ -40,7 +40,7 @@ EXTRA_PHRASES = [
     "sunny", "date", "rain", "snow", "thunderstorm", "lightning", "wind", "high and low", "sunrise and sunset",
     "forecast", "hourly graph", "tornado warning", "winter storm watch", "timer", "message", "christmas",
     "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer",
-    "air quality poor",
+    "air quality poor", "tide", "high tide", "low tide",
 ]
 # What Piper reads when it differs from the key (the key stays the NWS name so lookups work).
 SPEAK_AS = {
