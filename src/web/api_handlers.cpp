@@ -18,6 +18,7 @@
 #include "net/voice_pack.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "util/moon.h"
 #include "util/zambretti.h"
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
@@ -187,6 +188,16 @@ namespace web {
       sp["progress"] = vps.progress;
       sp["available"] = vps.available_version;
       sp["error"] = vps.err;
+      {
+        moon::Info mi = moon::at(time(nullptr));
+        JsonObject mo = root["moon"].to<JsonObject>();
+        mo["phase"] = moon::name(mi.phase);
+        mo["illumination"] = (int)lroundf(mi.illumination * 100);
+        mo["age_days"] = serialized(String(mi.age_days, 1));
+        mo["waxing"] = mi.waxing;
+        mo["days_to_full"] = serialized(String(mi.days_to_full, 1));
+        mo["days_to_new"] = serialized(String(mi.days_to_new, 1));
+      }
       {
         tide::Status ts = tide::status();
         tide::Data td; tide::get(td);

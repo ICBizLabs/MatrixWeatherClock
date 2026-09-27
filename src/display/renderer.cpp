@@ -20,6 +20,7 @@
 #include "util/zambretti.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "util/moon.h"
 #include <esp_heap_caps.h>
 #include "time/time_service.h"
 #include "alarm/alarm.h"
@@ -327,6 +328,57 @@ namespace renderer {
       baroScroll.setText(up.c_str(), 15, now);
       baroScroll.draw(pc, 0, Y_L2, W, colDate(), now, true);
     }
+    // ---- moon ----
+    // 13-pixel disc, lit side computed per row from the phase (waxing lit on the right, as seen from the north)
+    void drawMoonIcon(Canvas& pc, int16_t x0, int16_t y0, float fraction) {
+      const uint16_t lit = Canvas::rgb(0xEAEAD0), dark = Canvas::rgb(0x14141C);
+      const float R = 6.5f, cx = 6.5f, cy = 6.5f;
+      const float k = cosf(2.0f * (float)M_PI * fraction);
+      for (int y = 0; y < 13; y++) {
+        float dy = (y + 0.5f - cy) / R;
+        if (dy <= -1.0f || dy >= 1.0f) continue;
+        float half = sqrtf(1.0f - dy * dy) * R;
+        float term = k * half;
+        for (int x = 0; x < 13; x++) {
+          float dx = x + 0.5f - cx;
+          if (dx < -half || dx > half) continue;
+          bool on = fraction < 0.5f ? (dx > term) : (dx < -term);
+          pc.drawPixel(x0 + x, y0 + y, on ? lit : dark);
+        }
+      }
+    }
+    float demoMoonFraction = -1;   // < 0 = real moon
+    void drawMoonPage(Canvas& pc, bool timeValid, uint32_t now) {
+      classicFont(pc);
+      moon::Info m;
+      if (demo.on && demoMoonFraction >= 0) {
+        m = moon::at(time(nullptr));
+        m.fraction = demoMoonFraction; m.illumination = (1.0f - cosf(2.0f * (float)M_PI * demoMoonFraction)) / 2.0f;
+        m.phase = demoMoonFraction < 0.5f ? moon::Phase::WaxingGibbous : moon::Phase::WaningCrescent; m.waxing = demoMoonFraction < 0.5f;
+        m.days_to_full = 4.6f; m.days_to_new = 19.3f;
+      } else if (!timeValid) { pc.drawTextCentered("MOON: NO TIME", W / 2, Y_SINGLE, C_GREY); return; }
+      else m = moon::at(time(nullptr));
+      drawMoonIcon(pc, 1, 1, m.fraction);
+      const char* l1; const char* l2;
+      switch (m.phase) {
+        case moon::Phase::New: l1 = "NEW"; l2 = "MOON"; break;
+        case moon::Phase::WaxingCrescent: l1 = "WAXING"; l2 = "CRESCENT"; break;
+        case moon::Phase::FirstQuarter: l1 = "FIRST"; l2 = "QUARTER"; break;
+        case moon::Phase::WaxingGibbous: l1 = "WAXING"; l2 = "GIBBOUS"; break;
+        case moon::Phase::Full: l1 = "FULL"; l2 = "MOON"; break;
+        case moon::Phase::WaningGibbous: l1 = "WANING"; l2 = "GIBBOUS"; break;
+        case moon::Phase::LastQuarter: l1 = "LAST"; l2 = "QUARTER"; break;
+        default: l1 = "WANING"; l2 = "CRESCENT"; break;
+      }
+      // the second line alternates between the phase word and the lit fraction / days to the next full or new moon
+      char alt[12];
+      const uint8_t slot = (uint8_t)((now / 4000) % 3);
+      if (slot == 1) snprintf(alt, sizeof(alt), "%d%% LIT", (int)lroundf(m.illumination * 100));
+      else if (slot == 2) { if (m.waxing && m.phase != moon::Phase::Full) snprintf(alt, sizeof(alt), "FULL %dD", (int)lroundf(m.days_to_full)); else snprintf(alt, sizeof(alt), "NEW %dD", (int)lroundf(m.days_to_new)); }
+      pc.drawText(l1, 15, Y_L1, colDate());
+      pc.drawText(slot ? alt : l2, 15, Y_L2, colText());
+    }
+
     tide::Data demoTide;
     void buildDemoTide(time_t t) {
       demoTide = tide::Data(); demoTide.valid = true; demoTide.metric = !g_cfg.weather.imperial; demoTide.n = 4;
@@ -355,11 +407,12 @@ namespace renderer {
       pc.drawText(l2, 2, Y_L2, second.high ? cHi : cLo);
       // rising / falling arrow after the first line
       drawTrend(pc, (int16_t)(2 + pc.textWidth(l1) + 3), Y_L1 + 1, rising ? env_sensor::Trend::Rising : env_sensor::Trend::Falling);
-      // height now, tiny, bottom right
+      // height now in the small font after the second line, only when it fits (the Status tab carries the unit)
+      const int16_t w2 = pc.textWidth(l2);
       tinyFont(pc);
       char hb[12];
-      snprintf(hb, sizeof(hb), "%.1f%s", h, d.metric ? "M" : "FT");
-      pc.drawTextRight(hb, W - 1, Y_L2 + 2, colText());
+      snprintf(hb, sizeof(hb), "%.1f", h);
+      if (2 + w2 + 3 + pc.textWidth(hb) <= W) pc.drawTextRight(hb, W - 1, Y_L2 + 2, colText());
       classicFont(pc);
     }
     // a page in the rotation is shown only when it has something to show
@@ -374,6 +427,7 @@ namespace renderer {
     }
     void drawPage(Canvas& pc, uint8_t id, const struct tm& lt, bool timeValid, uint32_t now) {
       classicFont(pc);
+      if (id == PAGE_MOON) { drawMoonPage(pc, timeValid, now); return; }
       if (id == PAGE_TIDE) { tide::Data td; if (demo.on) td = demoTide; else tide::get(td); drawTidePage(pc, td, timeValid || demo.on); return; }
       if (id == PAGE_INDOOR) { drawIndoorPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
       if (id == PAGE_AIR) { drawAirPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
@@ -500,12 +554,13 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
-    constexpr uint8_t DEMO_COUNT = 27;
+    constexpr uint8_t DEMO_COUNT = 28;
     void buildDemoRadar();
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
       demo.av = AlertView(); demo.ls = lightning::Status(); demo.theme = nullptr;
       demo.night = demo.ringing = demo.ringTimer = demo.timer = demo.lightningPage = demo.indoorSet = false;
+      demoMoonFraction = -1;
       demo.page = 255; demo.screen = Screen::Composite;
       demo.wx = demoWeather(0, true, 72, 70, 46, 12, 19, 315);
       clearMessage();
@@ -552,6 +607,7 @@ namespace renderer {
                  demo.indoor.temp_c = 21.0f; demo.indoor.humidity = 58; demo.indoor.pressure_hpa = 1004.6f; demo.indoor.sea_level_hpa = 1008.9f;
                  demo.indoor.t_press = env_sensor::Trend::FallingFast; demo.indoor.d_press = -3.8f; demo.indoor.span_min = 180; break;
         case 26: demo.name = "tide";       demo.wx = demoWeather(1, true, 79, 78, 49, 9, 15, 250); demo.page = PAGE_TIDE; buildDemoTide(time(nullptr)); break;
+        case 27: demo.name = "moon";       demo.wx = demoWeather(0, false, 61, 59, 55, 4, 7, 20); demo.page = PAGE_MOON; demoMoonFraction = 0.38f; break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
@@ -559,7 +615,7 @@ namespace renderer {
       static const char* const SPOKEN[DEMO_COUNT] = {
         "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
         "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
-        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer", "tide" };
+        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer", "tide", "moon" };
       demo.lastRing = 0;
       if (demo.sound) {
         demo.soundPending = true;

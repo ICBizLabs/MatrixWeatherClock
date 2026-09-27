@@ -6,7 +6,7 @@
 
 namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
-  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro", "tide" };
+  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro", "tide", "moon" };
   const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
                                       "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
   constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
@@ -232,6 +232,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (!getBool(o, "transitions", d.transitions, t, err)) return false;
     if (!getBool(o, "precip_fx", d.precip_fx, t, err)) return false;
     if (!getBool(o, "holiday_themes", d.holiday_themes, t, err)) return false;
+    if (!getBool(o, "moon_page", d.moon_page, t, err)) return false;
     JsonObjectConst s = o["schedule"];
     if (!s.isNull()) {
       if (!getBool(s, "enabled", d.schedule.enabled, t, err)) return false;
@@ -582,6 +583,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["transitions"] = d.transitions;
   o["precip_fx"] = d.precip_fx;
   o["holiday_themes"] = d.holiday_themes;
+  o["moon_page"] = d.moon_page;
   JsonObject s = o["schedule"].to<JsonObject>();
   s["enabled"] = d.schedule.enabled;
   s["follow_sun"] = d.schedule.follow_sun;

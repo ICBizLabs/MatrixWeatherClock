@@ -25,6 +25,7 @@
 #include "net/voice_pack.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "util/moon.h"
 #include "net/shared_state.h"
 #include "net/alert_store.h"
 #include "net/wifi_manager.h"
@@ -129,6 +130,11 @@ void setup() {
   buttons::begin(onButton);
   env_sensor::begin(g_cfg.indoor);
   addSensorPages();
+  if (g_cfg.display.moon_page) {   // the moon page needs nothing but the date
+    bool has = false;
+    for (uint8_t i = 0; i < g_cfg.display.npages; i++) if (g_cfg.display.pages[i] == PAGE_MOON) has = true;
+    if (!has && g_cfg.display.npages < PAGE_COUNT) g_cfg.display.pages[g_cfg.display.npages++] = PAGE_MOON;
+  }
   lightning::begin();
   ir_remote::begin(g_cfg.remote);
   LOGI("setup done, heap %lu", (unsigned long)ESP.getFreeHeap());

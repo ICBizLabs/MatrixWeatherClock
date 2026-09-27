@@ -7,7 +7,7 @@ enum class Severity : uint8_t { Unknown = 0, Minor, Moderate, Severe, Extreme };
 const char* severity_name(Severity s);
 bool        severity_parse(const char* s, Severity& out);
 
-enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_TIDE, PAGE_COUNT };
+enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_TIDE, PAGE_MOON, PAGE_COUNT };
 const char* page_name(uint8_t id);
 bool        page_parse(const char* s, uint8_t& out);
 
@@ -103,6 +103,7 @@ struct DisplayConfig {
   bool transitions = true;          // slide pages in from the right
   bool precip_fx = true;            // animated rain / snow / lightning behind the weather pages
   bool holiday_themes = true;       // holiday colours and effects on special dates
+  bool moon_page = true;            // keep the moon-phase page in the rotation
   ScheduleConfig schedule;
   NightModeConfig night;
   ColorsConfig colors;

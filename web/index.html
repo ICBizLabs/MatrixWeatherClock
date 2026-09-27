@@ -175,7 +175,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
  </div></div>
  <div class="card"><h2>Pages</h2><div class="grid">
-  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor, air, baro, tide)<input data-k="display.pages" data-list="1"></label>
+  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor, air, baro, tide, moon)<input data-k="display.pages" data-list="1"></label>
   <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
   <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
   <label>Forecast every N page cycles<input data-k="display.forecast_every_n_cycles" type="number" min="1" max="20"></label>
@@ -183,6 +183,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="display.hourly_page" type="checkbox">Show 12-hour temperature / rain graph screen</label>
   <label class="chk"><input data-k="display.transitions" type="checkbox">Slide transitions between pages</label>
   <label class="chk"><input data-k="display.precip_fx" type="checkbox">Rain / snow / lightning animation behind the weather</label>
+  <label class="chk"><input data-k="display.moon_page" type="checkbox">Moon phase page</label>
   <label class="chk"><input data-k="display.holiday_themes" type="checkbox">Holiday colours and effects</label>
   <label>Show IP address after connecting (seconds, 0 = off)<input data-k="display.ip_on_connect_sec" type="number" min="0" max="120"></label>
  </div></div>
@@ -490,6 +491,7 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  if(s.weather.valid){const c=s.weather.cur,u=s.weather.units==='imperial';row(n,'Weather',c.text+', '+Math.round(c.temp)+'°'+(u?'F':'C')+' (feels '+Math.round(c.feels)+'°), humidity '+Math.round(c.humidity)+'%, wind '+Math.round(c.wind)+(u?' mph':' km/h'));
  (s.weather.daily||[]).forEach(d=>row(n,d.date,d.text+' '+Math.round(d.tmax)+'° / '+Math.round(d.tmin)+'°, rain '+d.pop+'%'));row(n,'Weather updated',ago(s.weather.age_s)+(s.net.wx_err?' <span class="bad">'+s.net.wx_err+'</span>':''));}
  else row(n,'Weather','<span class="warn">no data'+(s.net.wx_err?': '+s.net.wx_err:'')+'</span>');
+ if(s.moon)row(n,'Moon',s.moon.phase+', '+s.moon.illumination+'% lit'+(s.moon.waxing?', full in '+Math.round(s.moon.days_to_full)+' days':', new in '+Math.round(s.moon.days_to_new)+' days'));
  row(n,'Alerts checked',ago(s.net.al_ok_age_s)+(s.net.al_err?' <span class="bad">'+s.net.al_err+'</span>':'')+(s.alerts.stale?' <span class="warn">stale</span>':''));
  const a=$('#st-alerts');a.innerHTML=s.alerts.items.length?'':'<span class="msg">No active alerts for your location.</span>';
  s.alerts.items.forEach(x=>a.insertAdjacentHTML('beforeend','<div class="al '+x.severity+'"><b>'+x.event+'</b> <small>'+x.severity+(x.test?' · TEST':'')+(x.acknowledged?' · acknowledged':'')+'</small><br>'+x.headline+'<br><small>'+x.sender+' · '+x.area+'</small></div>'));

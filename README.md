@@ -42,6 +42,8 @@ arrives, and is configured entirely through its own web interface.
   hearts or sparkles on the day.
 - **Pushbullet**: new weather alerts, nearby lightning and alarms pushed to your phone; pushes sent to the clock
   (from the phone app, IFTTT or scripts) scroll on the panel.
+- **Moon phase**: a page with the moon drawn as it looks tonight, the phase name, how much is lit and the days to the
+  next full or new moon, computed on the clock from the date alone.
 - **Tides**: the next high and low water from NOAA's tide predictions for the station you pick, with a rising or
   falling arrow and the height right now, as a page and on the Status tab.
 - **Animated weather radar**: an eleven-frame NEXRAD loop of the last 50 minutes around your location, full screen
@@ -198,8 +200,8 @@ timer, message, holiday themes, night mode, test pattern and update. Individual 
 | Test pattern | Radar loop: coastline, water tint, home cross (real data, dry day) | Indoor page: temperature, humidity, pressure with trend arrows |
 | <img src="docs/screens/gif/air.gif" width="256" alt="Air quality page (BME680)"> | <img src="docs/screens/gif/baro.gif" width="256" alt="Barometer page with Zambretti forecast"> |
 | Air quality page: score, trend, good / fair / poor (BME680) | Barometer page: pressure, tendency and the Zambretti forecast |
-| <img src="docs/screens/gif/tide.gif" width="256" alt="Tide page: next high and low, rising arrow, height now"> |
-| Tide page: next high and low water, rising / falling arrow, height right now |
+| <img src="docs/screens/gif/tide.gif" width="256" alt="Tide page: next high and low, rising arrow, height now"> | <img src="docs/screens/gif/moon.gif" width="256" alt="Moon phase page"> |
+| Tide page: next high and low water, rising / falling arrow, height right now | Moon page: tonight's disc, phase name, percentage lit, days to full or new |
 
 ### Weather alert screens
 
@@ -292,7 +294,7 @@ IP address once online). After every WiFi connection the IP address is shown for
 The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
 thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
 storm watch, an alarm, a running and a finished timer, a message, the holiday themes, night mode, the indoor sensor,
-air-quality, barometer and tide pages and a radar loop with a synthetic storm. It uses made-up
+air-quality, barometer, tide and moon pages and a radar loop with a synthetic storm. It uses made-up
 data, turns itself off after the chosen number of minutes, and the wheel push ends it early. It is silent unless
 "with sounds" is ticked, in which case the alert, lightning, alarm, timer and message scenarios play their chimes even
 during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
@@ -358,6 +360,16 @@ The loop takes its turn with the forecast and hourly screens every few page cycl
 centre of the picture or the current conditions report rain or snow it comes back every two page cycles. The Status
 tab plays the same loop enlarged with a "Show on the clock" button, `POST /api/show` with `screen=radar` does the same,
 and the Display tab sets radius, timing and how often it appears. US coverage only, like the NWS alerts.
+
+## Moon phase
+
+The **moon** page draws the disc with the lit part as it appears tonight (waxing on the right, as seen from the
+northern hemisphere), names the phase, and alternates the second line between the phase word, the percentage lit and
+the days to the next full or new moon. It is computed on the clock from the date with the standard low-precision
+lunar series, which lands new, quarter and full moons within about 20 minutes of the almanac. The Status tab has the
+same line, and the page can be dropped from the rotation on the Display tab.
+
+<img src="docs/screens/gif/moon.gif" width="384" alt="Moon phase page">
 
 ## Tides
 
