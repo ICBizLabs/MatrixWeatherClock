@@ -45,6 +45,7 @@ namespace env_sensor {
     struct { uint16_t T1; int16_t T2; int8_t T3; uint16_t P1; int16_t P2; int8_t P3; int16_t P4, P5; int8_t P6, P7; int16_t P8, P9; uint8_t P10;
              uint16_t H1, H2; int8_t H3, H4, H5; uint8_t H6; int8_t H7;
              int8_t GH1; int16_t GH2; int8_t GH3; uint8_t res_heat_range; int8_t res_heat_val; int8_t range_sw_err; } c680;
+    uint8_t variant680 = 0;   // register 0xF0: 0 = BME680, 1 = BME688 (gas result in other registers, other resistance formula)
 
     bool take() { return mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(20)) == pdTRUE; }
     void give() { xSemaphoreGive(mtx); }
@@ -86,12 +87,14 @@ namespace env_sensor {
       if (!i2c_bus::readRegs(addr, 0x8A, a, 23) || !i2c_bus::readRegs(addr, 0xE1, b, 14) || !i2c_bus::readRegs(addr, 0x00, c, 5)) return false;
       c680.T2 = s16(a); c680.T3 = (int8_t)a[2];
       c680.P1 = u16(a + 4); c680.P2 = s16(a + 6); c680.P3 = (int8_t)a[8]; c680.P4 = s16(a + 10); c680.P5 = s16(a + 12);
-      c680.P7 = (int8_t)a[14]; c680.P6 = (int8_t)a[15]; c680.P10 = a[18]; c680.P8 = s16(a + 19); c680.P9 = s16(a + 21);
+      c680.P7 = (int8_t)a[14]; c680.P6 = (int8_t)a[15]; c680.P8 = s16(a + 18); c680.P9 = s16(a + 20); c680.P10 = a[22];   // 0x9C/0x9D, 0x9E/0x9F, 0xA0
       c680.H2 = (uint16_t)((b[0] << 4) | (b[1] >> 4));
       c680.H1 = (uint16_t)((b[2] << 4) | (b[1] & 0x0F));
       c680.H3 = (int8_t)b[3]; c680.H4 = (int8_t)b[4]; c680.H5 = (int8_t)b[5]; c680.H6 = b[6]; c680.H7 = (int8_t)b[7];
       c680.T1 = u16(b + 8);
       c680.GH2 = s16(b + 10); c680.GH1 = (int8_t)b[12]; c680.GH3 = (int8_t)b[13];
+      if (!i2c_bus::readReg(addr, 0xF0, variant680)) variant680 = 0;
+      variant680 &= 1;
       c680.res_heat_val = (int8_t)c[0];
       c680.res_heat_range = (uint8_t)((c[2] >> 4) & 0x03);
       c680.range_sw_err = (int8_t)((int8_t)(c[4] & 0xF0) / 16);
@@ -100,11 +103,11 @@ namespace env_sensor {
       gasOn = cfg.gas;
       if (gasOn) {
         const uint8_t hc = heaterCode(320.0f, 25.0f);
-        LOGI("indoor: BME680 heater code %u for 320 C (GH1 %d GH2 %d GH3 %d range %u val %d)", hc, c680.GH1, c680.GH2, c680.GH3, c680.res_heat_range, c680.res_heat_val);
+        LOGI("indoor: %s heater code %u for 320 C (GH1 %d GH2 %d GH3 %d range %u val %d sw_err %d)", variant680 ? "BME688" : "BME680", hc, c680.GH1, c680.GH2, c680.GH3, c680.res_heat_range, c680.res_heat_val, c680.range_sw_err);
         ok &= i2c_bus::writeReg(addr, 0x5A, hc);                            // heater profile 0: 320 C
         ok &= i2c_bus::writeReg(addr, 0x64, 0x65);     // gas_wait_0: 37 x 4 ms = 148 ms
         ok &= i2c_bus::writeReg(addr, 0x70, 0x00);     // heater on
-        ok &= i2c_bus::writeReg(addr, 0x71, 0x10);     // run_gas, profile 0
+        ok &= i2c_bus::writeReg(addr, 0x71, variant680 ? 0x20 : 0x10);   // run_gas is bit 4 on the BME680, bit 5 on the BME688; profile 0
       } else {
         ok &= i2c_bus::writeReg(addr, 0x70, 0x08);     // heater off
         ok &= i2c_bus::writeReg(addr, 0x71, 0x00);     // gas measurement off
@@ -163,8 +166,8 @@ namespace env_sensor {
     }
 
     bool read680(float& t, float& p, float& h, bool& gasValid, float& gasOhm) {
-      uint8_t d[15];
-      if (!i2c_bus::readRegs(addr, 0x1D, d, 15)) return false;
+      uint8_t d[17];
+      if (!i2c_bus::readRegs(addr, 0x1D, d, 17)) return false;
       if (!(d[0] & 0x80)) return false;                 // new_data not set yet
       float adcP = (float)(((uint32_t)d[2] << 12) | ((uint32_t)d[3] << 4) | (d[4] >> 4));
       float adcT = (float)(((uint32_t)d[5] << 12) | ((uint32_t)d[6] << 4) | (d[7] >> 4));
@@ -196,9 +199,18 @@ namespace env_sensor {
       if (h > 100) h = 100; else if (h < 0) h = 0;
       gasValid = false; gasOhm = 0;
       if (gasOn) {
-        const uint8_t lsb = d[14];
-        const uint16_t adcG = (uint16_t)(((uint16_t)d[13] << 2) | (lsb >> 6));
-        if ((lsb & 0x20) && (lsb & 0x10)) { gasValid = true; gasOhm = gasResistance(adcG, lsb & 0x0F); }   // gas_valid and heat_stab
+        // BME680: gas_r at 0x2A/0x2B (d[13], d[14]); BME688: at 0x2C/0x2D (d[15], d[16]). The lsb carries gas_valid (bit 5),
+        // heat_stab (bit 4) and the range (bits 3:0).
+        const uint8_t msb = variant680 ? d[15] : d[13], lsb = variant680 ? d[16] : d[14];
+        const uint16_t adcG = (uint16_t)(((uint16_t)msb << 2) | (lsb >> 6));
+        if ((lsb & 0x20) && (lsb & 0x10)) {
+          gasValid = true;
+          if (variant680) {   // BME688 formula (bme68x driver, "high" variant)
+            const uint32_t var1 = 262144u >> (lsb & 0x0F);
+            const int32_t var2 = 4096 + ((int32_t)adcG - 512) * 3;
+            gasOhm = var2 > 0 ? (1000000.0f * (float)var1) / (float)var2 : 0;
+          } else gasOhm = gasResistance(adcG, lsb & 0x0F);
+        }
       }
       return true;
     }
@@ -289,7 +301,8 @@ namespace env_sensor {
       if (!f) return;
       float v = f.parseFloat();
       f.close();
-      if (v > 0.5f && v < 100000.0f) { airBaseline = savedBaseline = v; LOGI("indoor: air baseline %.1f kOhm restored", v); }
+      if (v > 0.5f && v < 2000.0f) { airBaseline = savedBaseline = v; LOGI("indoor: air baseline %.1f kOhm restored", v); }
+      else LOGW("indoor: stored air baseline %.1f kOhm is not plausible, starting over", v);
     }
 
     // relative air quality: 75 % from gas resistance against the learned clean-air baseline, 25 % humidity comfort
@@ -304,6 +317,7 @@ namespace env_sensor {
       if (!gasOn || !gasValid) return;
       if (now - startedMs < GAS_BURN_IN_MS) return;                       // heater still settling
       const float g = r.gas_kohm;
+      if (g <= 0.5f || g > 2000.0f) return;                                // not a real heated-plate reading
       if (g > airBaseline) airBaseline = g;                                // clean air raises the baseline at once
       else airBaseline -= (airBaseline - g) * 0.00006f;                    // and it drifts down slowly (~2 % per hour at 10 s samples)
       r.air_baseline_kohm = airBaseline;
@@ -448,7 +462,7 @@ namespace env_sensor {
     switch (kind) {
       case Type::BMP280: return "BMP280";
       case Type::BME280: return "BME280";
-      case Type::BME680: return "BME680";
+      case Type::BME680: return variant680 ? "BME688" : "BME680";
       default: return "none";
     }
   }

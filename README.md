@@ -386,7 +386,7 @@ the predictions come from CO-OPS; `/api/status` carries the same numbers with ep
 ## Indoor sensor
 
 Any board with a Bosch **BME280** (temperature, humidity, pressure), **BMP280** (no humidity) or **BME680 / BME688**
-works: wire 3.3 V, GND, SDA to GPIO 1 and SCL to GPIO 2 of the controller (the same bus as the RTC and the codec). The
+works (the two 68x variants are told apart at start-up and the Status tab names the one it found): wire 3.3 V, GND, SDA to GPIO 1 and SCL to GPIO 2 of the controller (the same bus as the RTC and the codec). The
 firmware finds the sensor at 0x76 or 0x77 by its chip ID at boot (and keeps looking every 30 seconds, so it can be
 plugged in while the clock runs), adds an **indoor** page to the rotation (a house icon,
 temperature, humidity and pressure) and shows the values on the Status tab with a three-hour chart. Keep the sensor a
@@ -500,6 +500,7 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweat
 | No chime | Status tab shows whether the ES8311 was found; check volume, quiet hours, speaker connector |
 | Radar never appears | Status tab → System shows the radar state; it needs internet, a US location and about 20 s after WiFi for the first eleven frames; "NO RADAR" on the panel means no frames yet |
 | Indoor sensor "not detected" | the Status tab's Indoor card lists the I2C addresses seen and has a *Scan again* button; a BME280/BME680 answers at 0x76 or 0x77. Use the 4-pin connector on the left edge (3V3 GND IO1 IO2), SDA to IO1, SCL to IO2, wired by label (Qwiic cables have GND and 3V3 the other way round). The clock also looks for a sensor every 30 s, so no reboot is needed |
+| Sensor pressure is far off (1100+ hPa) or gas never becomes valid | update to 0.13.1 or later: it reads the BME680's pressure calibration correctly and drives the BME688 (which most "BME680" modules are today) through its own gas registers |
 | Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Location & Weather tab |
 | Sounds are fuzzy or distorted | Volume 100 % is the codec's full scale; the small speaker distorts near the top, so try 50-70 %. Firmware before 0.5.1 applied digital gain above 75 %, which clipped: update |
 | A page in the rotation never shows | sensor and tide pages appear only while their data exists; the panel skips them otherwise |

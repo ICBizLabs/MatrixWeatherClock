@@ -1,6 +1,6 @@
 {
   "name": "Matrix Weather Clock",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 0,
   "builds": [
@@ -8,15 +8,15 @@
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "matrix-weather-clock-0.13.0-factory.bin",
+          "path": "matrix-weather-clock-0.13.1-factory.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "ota": "matrix-weather-clock-0.13.0-ota.bin",
-  "ota_size": 1631504,
-  "ota_md5": "b609e3009ddc7ede1e2b9c155bf435f5",
+  "ota": "matrix-weather-clock-0.13.1-ota.bin",
+  "ota_size": 1631792,
+  "ota_md5": "a72909b19b144868919680aa328bbbab",
   "voice": {
     "file": "voice-en_US-ljspeech-v7.pack",
     "size": 3980376,
