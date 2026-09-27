@@ -25,7 +25,7 @@ EVENTS_FILE = ROOT / "tools" / "nws_event_types.json"
 NWS_TYPES_URL = "https://api.weather.gov/alerts/types"
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/"
 
-PACK_VERSION = 7
+PACK_VERSION = 8
 FORMAT = 2
 RATE = 22050
 MAGIC = b"MWCV"
@@ -41,10 +41,22 @@ EXTRA_PHRASES = [
     "forecast", "hourly graph", "tornado warning", "winter storm watch", "timer", "message", "christmas",
     "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer",
     "air quality poor", "tide", "high tide", "low tide", "moon", "full moon", "new moon",
+    # spoken time: the firmware strings these together ("it is" + hour + minute + AM/PM) in audio/voice.cpp, so the
+    # pack carries about thirty small words instead of a clip for every minute of the day
+    "it is", "o clock", "a m", "p m", "oh", "hundred", "zero",
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+    "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+    "twenty", "thirty", "forty", "fifty",
 ]
 # What Piper reads when it differs from the key (the key stays the NWS name so lookups work).
 SPEAK_AS = {
     "911 telephone outage": "nine one one telephone outage",
+    # the spoken-time words: the key is what the firmware looks up, this is what Piper reads
+    "o clock": "o'clock.",
+    "a m": "A.M.",
+    "p m": "P.M.",
+    "oh": "oh,",
+    "it is": "It is",
 }
 
 STEP = [7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97,

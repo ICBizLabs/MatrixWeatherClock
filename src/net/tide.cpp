@@ -6,6 +6,7 @@
 #include "http_util.h"
 #include "net_task.h"
 #include "wifi_manager.h"
+#include "time/time_service.h"
 #include "util/psram_alloc.h"
 #include "util/log.h"
 #include "version.h"
@@ -13,6 +14,7 @@
 namespace tide {
   namespace {
     constexpr const char* API = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&datum=MLLW&time_zone=lst_ldt&interval=hilo&format=json";
+    constexpr const char* API_WTEMP = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_temperature&date=latest&time_zone=lst_ldt&format=json";
     constexpr uint32_t FIRST_MS = 25000UL, RETRY_MS = 15 * 60000UL;
     SemaphoreHandle_t mtx = nullptr;
     Data data;
@@ -28,14 +30,40 @@ namespace tide {
       if (sscanf(s, "%d-%d-%d %d:%d", &Y, &M, &D, &h, &m) != 5) return false;
       struct tm t = {};
       t.tm_year = Y - 1900; t.tm_mon = M - 1; t.tm_mday = D; t.tm_hour = h; t.tm_min = m; t.tm_isdst = -1;
+      timesvc::tzLock();
       out = mktime(&t);
+      timesvc::tzUnlock();
       return out > 0;
+    }
+
+    // Not every station carries a thermometer, so a miss here is silent and leaves the previous reading alone.
+    void fetchWaterTemp(const AppConfig& cfg) {
+      const bool metric = cfg.tide.unit == 2 || (cfg.tide.unit == 0 && !cfg.weather.imperial);
+      String url = String(API_WTEMP) + "&station=" + cfg.tide.station + "&units=" + (metric ? "metric" : "english");
+      http_util::Options opt;
+      opt.userAgent = MWC_USER_AGENT_NAME "/" MWC_VERSION;
+      opt.accept = "application/json";
+      opt.timeoutMs = 15000;
+      JsonDocument doc(psramAllocator());
+      String err;
+      if (!http_util::get(url, opt, [&](Stream& s, int) { return deserializeJson(doc, s) == DeserializationError::Ok; }, err)) return;
+      if (!doc["error"].isNull()) return;
+      JsonArray a = doc["data"];
+      if (a.isNull() || a.size() == 0) return;
+      const char* v = a[a.size() - 1]["v"] | "";
+      if (!v[0]) return;
+      float t = atof(v);
+      if (t < -10 || t > 150) return;
+      time_t when = 0;
+      parseLocal(a[a.size() - 1]["t"] | "", when);
+      if (take()) { data.water_temp = t; data.water_t = when; give(); }
+      LOGI("tide: water %.1f%s at station %s", t, metric ? "C" : "F", cfg.tide.station);
     }
 
     bool fetch(const AppConfig& cfg) {
       const bool metric = cfg.tide.unit == 2 || (cfg.tide.unit == 0 && !cfg.weather.imperial);
       time_t nowT = time(nullptr);
-      struct tm lt; localtime_r(&nowT, &lt);
+      struct tm lt; timesvc::tzLock(); localtime_r(&nowT, &lt); timesvc::tzUnlock();
       char begin[12]; strftime(begin, sizeof(begin), "%Y%m%d", &lt);
       String url = String(API) + "&station=" + cfg.tide.station + "&units=" + (metric ? "metric" : "english") + "&begin_date=" + begin + "&range=54";
       http_util::Options opt;
@@ -69,7 +97,7 @@ namespace tide {
       if (d.n < 2) { if (take()) { st.last_err_ms = millis(); strlcpy(st.err, "no predictions", sizeof(st.err)); give(); } LOGW("tide: no predictions for station %s", cfg.tide.station); return false; }
       d.valid = true;
       d.fetched_ms = millis();
-      if (take()) { data = d; st.valid = true; st.last_ok_ms = millis(); st.fails = 0; st.err[0] = '\0'; give(); }
+      if (take()) { d.water_temp = data.water_temp; d.water_t = data.water_t; data = d; st.valid = true; st.last_ok_ms = millis(); st.fails = 0; st.err[0] = '\0'; give(); }
       LOGI("tide: station %s, %u extremes, next %s at %ld", d.station, d.n, d.ex[0].high ? "high" : "low", (long)d.ex[0].t);
       return true;
     }
@@ -96,7 +124,9 @@ namespace tide {
     if (time(nullptr) < 1700000000) { nextFetch = millis() + 30000UL; return; }   // the request is dated in local time
     refreshReq = false;
     const uint32_t now = millis();
-    if (fetch(cfg)) nextFetch = now + (uint32_t)(cfg.tide.refresh_hours ? cfg.tide.refresh_hours : 6) * 3600000UL;
+    const bool ok = fetch(cfg);
+    if (cfg.tide.water_temp) fetchWaterTemp(cfg);
+    if (ok) nextFetch = now + (uint32_t)(cfg.tide.refresh_hours ? cfg.tide.refresh_hours : 6) * 3600000UL;
     else nextFetch = now + RETRY_MS;
   }
 

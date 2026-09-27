@@ -27,21 +27,34 @@ arrives, and is configured entirely through its own web interface.
   own sound; volume, quiet hours and optional repeats while an alert stays unacknowledged.
 - **Spoken announcements**: after the chime a natural English voice says what happened: "Tornado Warning",
   "Lightning nearby", "Alarm", "Timer finished". The clips come from a voice pack rendered with Piper TTS that the
-  clock downloads once from the update site; no speech synthesis runs on the ESP32.
+  clock downloads once from the update site; no speech synthesis runs on the ESP32. It can also **speak the time**,
+  on request or on the hour, strung together from number clips.
+- **Hourly chime**, optionally striking the hour one to twelve times, with a half-hour chime and a spoken time if you
+  want them. Quiet hours silence it, so it will not wake you.
 - **Display control**: manual brightness, day/night schedule, night mode (very dim, clock only), gamma, colours,
   page order and timing.
 - **Web UI** with setup access point and captive portal, mDNS (`matrixweatherclock.local`), REST API, WiFi scanner,
-  test buttons (panel pattern, fake alert, chime), log viewer and over-the-air firmware update.
+  test buttons (panel pattern, fake alert, chime), log viewer and over-the-air firmware update. **Two WiFi networks**
+  can be saved, and the address can be static instead of DHCP.
 - **Lightning**: live strikes from the Blitzortung.org network (optional, via the community MQTT relay). Strikes within
   your radius show a bolt next to the clock, a flash across the panel, a "LIGHTNING 8MI NW 3M" page and an optional chime.
-- **Alarms and timer**: four alarms with weekday selection and label, a countdown timer; snooze or stop with the wheel.
+- **Alarms, timer and stopwatch**: four alarms with weekday selection, label, a snooze length you choose and an
+  optional one-off mode that switches the alarm off after it rings; a countdown timer; a stopwatch that counts up on
+  the panel. Snooze or stop with the wheel.
+- **Sleep timer**: run for a set number of minutes, then fade the panel out and hold it dark until you cancel it.
 - **Messages**: `POST /api/message` scrolls any text on the clock with an optional chime, for Home Assistant, scripts or
   phone shortcuts.
-- **More screens**: 12-hour temperature and rain-chance graph, sunrise/sunset page, brightness that follows the sun.
+- **More screens**: 12-hour temperature and rain-chance graph, sunrise/sunset page, brightness that follows the sun,
+  an **ultraviolet index** page with the WHO exposure band, a **sky** page with cloud cover and visibility, a **rain**
+  page with today's total and chance, **sea temperature** at your tide station, a **world clock** for a second time
+  zone, and a **countdown** to up to three dates of your own.
 - **Polish**: pages slide in, rain/snow/lightning animate behind the weather, holiday colour themes with confetti, snow,
-  hearts or sparkles on the day.
+  hearts or sparkles on the day, plus up to four **dates of your own** that colour the clock, and a date format that
+  can read month-first, day-first or numeric.
 - **Pushbullet**: new weather alerts, nearby lightning and alarms pushed to your phone; pushes sent to the clock
   (from the phone app, IFTTT or scripts) scroll on the panel.
+- **Webhook**: the same events posted as JSON to any URL you choose, so ntfy, Gotify, Home Assistant, Discord or your
+  own script can react without an account. The two JSON field names are configurable to match the service.
 - **Moon phase**: a page with the moon drawn as it looks tonight, the phase name, how much is lit and the days to the
   next full or new moon, computed on the clock from the date alone.
 - **Tides**: the next high and low water from NOAA's tide predictions for the station you pick, with a rising or
@@ -330,8 +343,20 @@ show lightning in the animation even without the network feed.
 
 Alarms tab: up to four alarms with time, weekdays, label and sound. A ringing alarm shows `ALARM` and its label,
 flashes an orange frame and repeats the sound every few seconds for up to ten minutes, ignoring quiet hours.
-Wheel push (K2) stops it, wheel up/down snoozes for nine minutes; the Status tab has the same buttons. The timer
-counts down in the bottom half and rings the same way.
+Wheel push (K2) stops it, wheel up/down snoozes; the Status tab has the same buttons. The timer counts down in the
+bottom half and rings the same way.
+
+Each alarm has its own **snooze length** (one to sixty minutes, nine by default) and can be marked **one-off**: it
+rings once and then switches itself off, and that change is saved, so a reminder for tomorrow morning does not come
+back the following week.
+
+The **stopwatch** counts up on the bottom half until you pause it and keeps the time on screen until you reset it.
+Start and pause it from the Alarms tab, the phone remote, an infrared key, or
+`POST /api/stopwatch {"action": "toggle"}`. It is independent of the countdown timer.
+
+The **sleep timer** runs the clock normally for the minutes you give it, then fades the panel out over the seconds set
+on the Display tab and holds it dark until you cancel it. `POST /api/sleep {"minutes": 30}`, or zero to cancel. It does
+not touch the night-mode schedule, and it does not survive a reboot.
 
 Messages: `POST /api/message` with `{"text": "...", "seconds": 60, "chime": true, "color": "#40C0FF"}` scrolls the
 text (0 seconds = until cleared with `POST /api/message/clear` or the wheel push). The Status tab has a form for it.
@@ -436,6 +461,18 @@ does not know), "Lightning nearby" for the first strike of a storm, "Alarm" or "
 the scenario names in demo mode. Each can be switched off separately on the Audio tab, and an announcement can be
 repeated up to three times. Speech follows the chime's quiet hours and volume.
 
+It can also **speak the time**, either on request (the Audio tab, the phone remote, an infrared key, or
+`POST /api/test/say-time`) or on the hour together with the chime. Rather than ship a clip for every minute of the day,
+the pack carries about thirty small words and the firmware strings them together: "It is" plus the hour, the minutes and
+AM or PM, following the 12- or 24-hour setting. So "it is three fifteen P M" is four clips played as one utterance.
+
+## Hourly chime
+
+The Audio tab can chime on the hour. Three variations: a single chime, the hour **struck** one to twelve times at about
+one beat a second, and an extra single chime on the half hour. Any of the fourteen sounds can be the hourly one, the
+doorbell by default, and the spoken time can follow it. Quiet hours silence all of it, so it will not wake you, and it
+stays quiet while an alarm is ringing or snoozed.
+
 The voice is not synthesized on the ESP32. A GitHub Actions step renders every phrase with
 [Piper](https://github.com/rhasspy/piper) (voice `en_US-ljspeech-medium`, trained on the public-domain LJ Speech
 recordings), stores the clips as 8-bit µ-law (clean enough that the small speaker, not the codec, is the limit) and
@@ -454,6 +491,22 @@ lightning strike of a storm (and at most every five minutes after that), and opt
 on it also polls your account and scrolls any push sent to all devices or to the clock: pick "Matrix Weather Clock" in the
 phone app, or use IFTTT / Home Assistant / `curl` against the Pushbullet API. Pushes the clock sent itself are ignored.
 
+## Webhook
+
+The Notify tab can also post a small JSON object to any URL when something happens, which covers everything Pushbullet
+does without an account. Pick the events you want (weather alerts above a severity, nearby lightning, alarms and
+timers, poor indoor air) and give a URL. The body looks like this:
+
+```json
+{ "title": "Tornado Warning", "message": "Tornado Warning until 5 PM ...", "event": "alert", "device": "matrixweatherclock" }
+```
+
+The two field names are configurable, so one shape fits several services: `title` and `message` are what
+[ntfy](https://ntfy.sh/) expects and are the defaults. One extra request header is available for services that need a
+token, for example `Authorization`. *Send a test* posts a test notification so you can check the wiring. Only HTTP 200
+counts as success; a service that answers 204 shows as an error and is not retried, because a notification is not worth
+a second attempt.
+
 ## Remote control
 
 **Infrared.** Solder or plug a VS1838B / TSOP38238 receiver module to the bottom header: OUT to the **RX0** pad
@@ -465,8 +518,8 @@ its timing, so it can still be learned. Holding a key repeats only the brightnes
 <img src="docs/ui/remote.png" width="300" alt="Phone remote page with big buttons">
 
 **Phone.** http://matrixweatherclock.local/remote is a one-screen remote for a phone or tablet, made to be added to the home
-screen: dismiss, next page, radar, forecast, hourly graph, 5/10/30-minute timers, snooze and stop, brighter and dimmer,
-night mode, mute, chime, refresh, demo, show IP. Scripts and home automation can call the same actions with
+screen: dismiss, next page, radar, forecast, hourly graph, 5/10/30-minute timers, snooze and stop, stopwatch, speak
+the time, brighter and dimmer, night mode, mute, chime, refresh, demo, sleep in 30 or 60 minutes, show IP. Scripts and home automation can call the same actions with
 `POST /api/action?name=show_radar`; `GET /api/actions` lists them. Brightness steps and the night-mode override live
 in RAM and reset at reboot; mute toggles the audio switch for the session.
 
@@ -477,6 +530,38 @@ in RAM and reset at reboot; mute toggles the audio switch for the session.
 | K1 | next page (snooze while ringing) | run the panel test pattern |
 | K2 | stop a ringing alarm/timer, else clear a message, else acknowledge alerts | play a test chime (ignores quiet hours) |
 | K3 | refresh weather and alerts now (snooze while ringing) | reboot |
+
+## More pages
+
+Six pages were added in 0.14.0. Each hides itself when it has no data, so adding one to the rotation on the Display tab
+is safe even if the source is not set up.
+
+| Page | Shows |
+|---|---|
+| `uv` | The ultraviolet index now and today's peak, coloured by the WHO exposure band from low to extreme |
+| `sky` | Cloud cover as a percentage and visibility in miles or kilometres |
+| `rain` | Rainfall so far today and the chance of more |
+| `water` | Sea temperature at your tide station, when that station reports one |
+| `world` | The time in a second zone you pick, with a short label of your own |
+| `event` | Days to whichever of your countdowns is nearest, or "TODAY" on the day |
+
+The ultraviolet index, cloud cover, visibility and rainfall come from the weather request that was already being made,
+so they cost nothing extra. Sea temperature is a second small request to the same NOAA station as the tides, and can be
+switched off on the Location & Weather tab.
+
+**Countdowns.** Up to three dates on the Alarms tab, each with a label. Tick *every year* for a birthday or anniversary
+and it rolls forward once the day has passed; leave it clear and give a full date for a one-off.
+
+**Your own dates.** The Display tab takes up to four dates of your own on top of the nine built-in holidays. On that day
+the clock and date take the colour you choose, with a sparkle effect. Yours win if a built-in holiday falls on the same
+day.
+
+**Date format.** The date page can read month-first (`SEP 27`), day-first (`27 SEP`) or numeric (`09-27`).
+
+**Two networks and a static address.** The WiFi tab takes a second SSID and password; the clock alternates between the
+two while it retries, and falls back to the setup access point only when neither answers. Untick *automatic address* to
+set an IP, gateway, netmask and DNS server instead of using DHCP. A static address takes effect on the next connection,
+so save and let the clock reconnect.
 
 ## REST API
 
@@ -489,6 +574,9 @@ curl -X POST http://matrixweatherclock.local/api/config -H 'Content-Type: applic
      -d '{"display":{"brightness":40},"audio":{"volume":80}}'
 curl -X POST http://matrixweatherclock.local/api/test/alert -H 'Content-Type: application/json' \
      -d '{"event":"Tornado Warning","severity":"Extreme","headline":"Test until 5 PM","minutes":3}'
+curl -X POST http://matrixweatherclock.local/api/sleep -H 'Content-Type: application/json' -d '{"minutes":30}'
+curl -X POST http://matrixweatherclock.local/api/stopwatch -H 'Content-Type: application/json' -d '{"action":"toggle"}'
+curl -X POST 'http://matrixweatherclock.local/api/test/say-time?force=1'
 curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweatherclock.local/update
 ```
 

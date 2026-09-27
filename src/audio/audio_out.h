@@ -15,6 +15,10 @@ namespace audio_out {
   // A chime (ChimeStyle::None = no chime) followed by an optional clip repeated 1..3 times, played as one sequence
   // with the amplifier kept on. Refused while another sound is queued or playing: long sounds are never stacked.
   bool play(ChimeStyle style, const ClipRef* clip, uint8_t repeat, bool force);
+  // Several clips back to back as one utterance, with a short gap between words: used to speak the time from
+  // separate number clips instead of shipping a clip per minute of the day.
+  constexpr uint8_t MAX_SEQ = 6;
+  bool playSeq(ChimeStyle style, const ClipRef* clips, uint8_t n, bool force);
   bool busy();                                // something is queued or playing (the voice pack swap waits for this)
   const char* lastSuppressReason();
 }

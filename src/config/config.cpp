@@ -19,7 +19,7 @@ bool config_load() {
   DeserializationError e = deserializeJson(doc, f);
   f.close();
   if (e) { LOGE("config: parse error %s, using defaults", e.c_str()); return false; }
-  uint16_t changed = 0;
+  uint32_t changed = 0;
   String err;
   AppConfig merged;
   if (!config_from_json(doc.as<JsonObjectConst>(), merged, changed, err)) {

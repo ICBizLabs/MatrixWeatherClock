@@ -31,6 +31,13 @@ namespace renderer {
   uint8_t nightOverride();                    // 0 auto, 1 forced on, 2 forced off
   bool nightActive();
   uint8_t effectiveBrightness();
+  // Sleep timer: run normally for `minutes`, fade out over display.sleep_fade_sec, then hold the panel dark until
+  // cancelled. 0 minutes cancels. Survives nothing but a reboot, by design.
+  void startSleep(uint32_t minutes);
+  void cancelSleep();
+  bool sleepPending();                        // armed, counting down or faded out
+  uint32_t sleepRemainingSec();               // until the fade starts; 0 once it has
+  bool sleepFadedOut();
   const char* screenName();
   const char* themeName();                    // active holiday theme or ""
 }

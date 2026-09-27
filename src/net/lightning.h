@@ -22,5 +22,6 @@ namespace lightning {
   bool consumeStrikeEvent();     // true once for every new nearby strike (drives the flash animation)
   bool consumeChimeEvent();      // true when a chime is due (first strike of a storm, then rate limited)
   bool consumeNotifyEvent();     // same cadence, independent of the chime setting (phone notifications)
+  bool consumeWebhookEvent();    // same cadence again, for the outgoing webhook
   const char* bearingName(int16_t deg);
 }

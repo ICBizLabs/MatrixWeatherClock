@@ -21,7 +21,7 @@ namespace audio_out {
     constexpr size_t FRAMES = 256;
     constexpr const char* PACK_PATH = "/voice.pack";
     enum class ReqType : uint8_t { Chime, Clip };
-    struct Request { ReqType type; ChimeStyle style; ClipRef clip; uint8_t repeat; uint16_t preGapMs; };
+    struct Request { ReqType type; ChimeStyle style; ClipRef clip[MAX_SEQ]; uint8_t nclips; uint8_t repeat; uint16_t preGapMs; };
     I2SClass i2s;
     AudioConfig cfg;
     QueueHandle_t q = nullptr;
@@ -263,7 +263,10 @@ namespace audio_out {
         writeSilence(200);
         do {                                   // drain the sequence with the amplifier on: chime, gap, clip(s)
           if (r.type == ReqType::Chime) play(r.style);
-          else for (uint8_t i = 0; i < r.repeat; i++) { writeSilence(i ? 400 : r.preGapMs); playClip(r.clip); }
+          else for (uint8_t i = 0; i < r.repeat; i++) {
+            writeSilence(i ? 400 : r.preGapMs);
+            for (uint8_t k = 0; k < r.nclips; k++) { if (k) writeSilence(40); playClip(r.clip[k]); }
+          }
         } while (xQueueReceive(q, &r, pdMS_TO_TICKS(300)) == pdTRUE);
         writeSilence(100);
         digitalWrite(pins::PA_EN, LOW);
@@ -308,24 +311,43 @@ namespace audio_out {
     return in_window(cfg.quiet.start, cfg.quiet.end, (uint16_t)(lt.tm_hour * 60 + lt.tm_min));
   }
 
+  namespace {
+    // one queued chime plus one queued utterance; the task drains both with the amplifier on
+    bool playSeqInner(ChimeStyle style, const ClipRef* clips, uint8_t n, uint8_t repeat, bool force) {
+      (void)force;
+      if (n > MAX_SEQ) n = MAX_SEQ;
+      Request rc = { ReqType::Chime, style, {}, 0, 0, 0 };
+      Request rv = { ReqType::Clip, ChimeStyle::None, {}, n, (uint8_t)(repeat < 1 ? 1 : (repeat > 3 ? 3 : repeat)),
+                     (uint16_t)(style != ChimeStyle::None ? 250 : 0) };
+      for (uint8_t i = 0; i < n; i++) rv.clip[i] = clips[i];
+      if (xSemaphoreTake(playMtx, pdMS_TO_TICKS(50)) != pdTRUE) { suppressReason = "busy"; return false; }
+      bool ok = !playing && uxQueueMessagesWaiting(q) == 0;
+      if (ok) {
+        if (style != ChimeStyle::None) xQueueSend(q, &rc, 0);
+        if (n) xQueueSend(q, &rv, 0);
+      }
+      xSemaphoreGive(playMtx);
+      if (!ok) suppressReason = "busy";
+      return ok;
+    }
+  }
+
   bool play(ChimeStyle style, const ClipRef* clip, uint8_t repeat, bool force) {
     suppressReason = "";
     if (!ready) { suppressReason = "no audio"; return false; }
     if (style == ChimeStyle::None && !clip) { suppressReason = "chime style none"; return false; }
     if (!force && !cfg.enabled) { suppressReason = "audio disabled"; LOGI("sound suppressed: audio disabled"); return false; }
     if (!force && inQuietHours()) { suppressReason = "quiet hours"; LOGI("sound suppressed: quiet hours"); return false; }
-    Request rc = { ReqType::Chime, style, ClipRef(), 0, 0 };
-    Request rv = { ReqType::Clip, ChimeStyle::None, clip ? *clip : ClipRef(), (uint8_t)(repeat < 1 ? 1 : (repeat > 3 ? 3 : repeat)),
-                   (uint16_t)(style != ChimeStyle::None ? 250 : 0) };
-    if (xSemaphoreTake(playMtx, pdMS_TO_TICKS(50)) != pdTRUE) { suppressReason = "busy"; return false; }
-    bool ok = !playing && uxQueueMessagesWaiting(q) == 0;
-    if (ok) {
-      if (style != ChimeStyle::None) xQueueSend(q, &rc, 0);
-      if (clip) xQueueSend(q, &rv, 0);
-    }
-    xSemaphoreGive(playMtx);
-    if (!ok) suppressReason = "busy";
-    return ok;
+    return playSeqInner(style, clip, clip ? 1 : 0, repeat, force);
+  }
+
+  bool playSeq(ChimeStyle style, const ClipRef* clips, uint8_t n, bool force) {
+    suppressReason = "";
+    if (!ready) { suppressReason = "no audio"; return false; }
+    if (style == ChimeStyle::None && (!clips || !n)) { suppressReason = "chime style none"; return false; }
+    if (!force && !cfg.enabled) { suppressReason = "audio disabled"; LOGI("sound suppressed: audio disabled"); return false; }
+    if (!force && inQuietHours()) { suppressReason = "quiet hours"; LOGI("sound suppressed: quiet hours"); return false; }
+    return playSeqInner(style, clips, n, 1, force);
   }
 
   bool chime(ChimeStyle style, bool force) { return play(style, nullptr, 0, force); }

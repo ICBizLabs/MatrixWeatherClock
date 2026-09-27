@@ -16,6 +16,8 @@ namespace tide {
     char station[12] = "";
     uint8_t n = 0;
     Extreme ex[MAX_EXTREMES];        // ascending time
+    float water_temp = -999;         // latest water temperature at the station, display unit; -999 = not reported
+    time_t water_t = 0;              // when that reading was taken
   };
   struct Status {
     bool enabled;

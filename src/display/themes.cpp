@@ -1,4 +1,5 @@
 #include "themes.h"
+#include "config/config.h"
 
 namespace themes {
   namespace {
@@ -22,6 +23,8 @@ namespace themes {
     }
   }
 
+  namespace { Theme custom = { "custom", 0xFFFFFF, 0xFFFFFF, 0xC0C0C0, Deco::Sparkle }; }
+
   struct tm sample(Sample s) {
     struct tm t = {};
     t.tm_year = 2026 - 1900; t.tm_mday = 1;
@@ -36,6 +39,17 @@ namespace themes {
 
   const Theme* forDate(const struct tm& lt) {
     const int mon = lt.tm_mon + 1, day = lt.tm_mday, year = lt.tm_year + 1900;
+    // Your own dates win over the built-in list, so a birthday can override a holiday on the same day.
+    for (uint8_t i = 0; i < g_cfg.display.nholidays && i < MAX_CUSTOM_HOLIDAYS; i++) {
+      const HolidayConfig& h = g_cfg.display.holidays[i];
+      if (h.month != mon || h.day != day) continue;
+      custom.name = h.label[0] ? h.label : "custom";
+      custom.time = h.color;
+      custom.date = h.color;
+      custom.text = 0xC0C0C0;
+      custom.deco = Deco::Sparkle;
+      return &custom;
+    }
     if (mon == 1 && day == 1) return &NEW_YEAR;
     if (mon == 2 && day == 14) return &VALENTINE;
     if (mon == 3 && day == 17) return &ST_PATRICK;

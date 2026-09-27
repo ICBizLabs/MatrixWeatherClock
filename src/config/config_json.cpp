@@ -6,7 +6,8 @@
 
 namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
-  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro", "tide", "moon" };
+  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro", "tide", "moon",
+                                     "uv", "sky", "rain", "water", "world", "event" };
   const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
                                       "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
   constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
@@ -101,6 +102,21 @@ namespace {
     }
     return h[0] != '-' && h[n - 1] != '-';
   }
+
+  bool validIp(const char* s) {            // dotted quad, four decimal octets 0..255
+    int parts = 0;
+    for (const char* p = s; ; ) {
+      if (!isdigit((unsigned char)*p)) return false;
+      int v = 0, digits = 0;
+      while (isdigit((unsigned char)*p)) { v = v * 10 + (*p++ - '0'); if (++digits > 3) return false; }
+      if (v > 255) return false;
+      parts++;
+      if (*p == '\0') break;
+      if (*p != '.' || parts == 4) return false;
+      p++;
+    }
+    return parts == 4;
+  }
 }
 
 const char* severity_name(Severity s) { uint8_t i = (uint8_t)s; return i < 5 ? SEVERITY_NAMES[i] : "Unknown"; }
@@ -112,7 +128,7 @@ bool chime_parse(const char* s, ChimeStyle& out) { uint8_t i; if (!nameLookup(CH
 const char* panel_driver_name(uint8_t d) { return d < PANEL_DRIVER_COUNT ? DRIVER_NAMES[d] : DRIVER_NAMES[0]; }
 bool panel_driver_parse(const char* s, uint8_t& out) { return nameLookup(DRIVER_NAMES, PANEL_DRIVER_COUNT, s, out); }
 
-bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, String& err) {
+bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, String& err) {
   if (src.isNull()) { err = "expected a JSON object"; return false; }
   bool t;
 
@@ -133,6 +149,20 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (!strcmp(c.wifi.hostname, "matrixclock")) { strlcpy(c.wifi.hostname, "matrixweatherclock", sizeof(c.wifi.hostname)); t = true; }   // project renamed in 0.10.0
     if (!validHostname(c.wifi.hostname)) { err = "hostname: use 1-31 lowercase letters, digits or '-'"; return false; }
     if (!getNum(o, "tx_power", c.wifi.tx_power, t, err, 8, 84)) return false;
+    if (!getStr(o, "ssid2", c.wifi.ssid2, t, err)) return false;
+    JsonVariantConst p2 = o["pass2"];
+    if (p2.is<const char*>() && strcmp(p2.as<const char*>(), "***") != 0) {
+      if (!getStr(o, "pass2", c.wifi.pass2, t, err)) return false;
+    }
+    if (!getBool(o, "dhcp", c.wifi.dhcp, t, err)) return false;
+    if (!getStr(o, "ip", c.wifi.ip, t, err)) return false;
+    if (!getStr(o, "gateway", c.wifi.gateway, t, err)) return false;
+    if (!getStr(o, "netmask", c.wifi.netmask, t, err)) return false;
+    if (!getStr(o, "dns", c.wifi.dns, t, err)) return false;
+    for (const char* f : { c.wifi.ip, c.wifi.gateway, c.wifi.netmask, c.wifi.dns }) {
+      if (f[0] && !validIp(f)) { err = "wifi: ip, gateway, netmask and dns must be dotted quads"; return false; }
+    }
+    if (!c.wifi.dhcp && (!c.wifi.ip[0] || !c.wifi.gateway[0])) { err = "wifi: a static address needs ip and gateway"; return false; }
     if (t) changed |= CHG_WIFI;
   }
 
@@ -154,6 +184,18 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (!getStr(o, "ntp2", c.time.ntp2, t, err)) return false;
     if (!getBool(o, "use_24h", c.time.use_24h, t, err)) return false;
     if (!getBool(o, "show_seconds", c.time.show_seconds, t, err)) return false;
+    JsonVariantConst dord = o["date_order"];
+    if (!dord.isNull()) {
+      const char* v = dord | "mdy";
+      if (!strcasecmp(v, "mdy")) c.time.date_order = 0;
+      else if (!strcasecmp(v, "dmy")) c.time.date_order = 1;
+      else if (!strcasecmp(v, "iso")) c.time.date_order = 2;
+      else { err = "time.date_order: mdy, dmy or iso"; return false; }
+      t = true;
+    }
+    if (!getStr(o, "tz2_id", c.time.tz2_id, t, err)) return false;
+    if (!getStr(o, "tz2_posix", c.time.tz2_posix, t, err)) return false;
+    if (!getStr(o, "tz2_label", c.time.tz2_label, t, err)) return false;
     if (t) changed |= CHG_TIME;
   }
 
@@ -260,6 +302,25 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       if (!getColor(col, "hi", d.colors.hi, t, err)) return false;
       if (!getColor(col, "lo", d.colors.lo, t, err)) return false;
     }
+    if (!getNum(o, "sleep_fade_sec", d.sleep_fade_sec, t, err, 0, 120)) return false;
+    JsonVariantConst hol = o["holidays"];
+    if (!hol.isNull()) {
+      if (!hol.is<JsonArrayConst>()) { err = "display.holidays: expected an array"; return false; }
+      uint8_t n = 0;
+      for (JsonObjectConst h : hol.as<JsonArrayConst>()) {
+        if (n >= MAX_CUSTOM_HOLIDAYS) break;
+        HolidayConfig& x = d.holidays[n];
+        x = HolidayConfig();
+        bool tt = false;
+        if (!getNum(h, "month", x.month, tt, err, 1, 12)) return false;
+        if (!getNum(h, "day", x.day, tt, err, 1, 31)) return false;
+        if (!getStr(h, "label", x.label, tt, err)) return false;
+        if (!getColor(h, "color", x.color, tt, err)) return false;
+        if (x.month && x.day) n++;
+      }
+      d.nholidays = n;
+      t = true;
+    }
     if (t) changed |= CHG_DISPLAY;
   }
 
@@ -303,6 +364,15 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       t = true;
     }
     if (!getNum(o, "repeat_min", a.repeat_min, t, err, 0, 120)) return false;
+    if (!getBool(o, "hourly_chime", a.hourly_chime, t, err)) return false;
+    if (!getBool(o, "hourly_strike", a.hourly_strike, t, err)) return false;
+    if (!getBool(o, "hourly_half", a.hourly_half, t, err)) return false;
+    if (!getBool(o, "hourly_speak", a.hourly_speak, t, err)) return false;
+    JsonVariantConst chh = o["hourly_style"];
+    if (!chh.isNull()) {
+      if (!chime_parse(chh.as<const char*>(), a.hourly_style)) { err = "hourly_style: unknown style"; return false; }
+      t = true;
+    }
     JsonObjectConst q = o["quiet"];
     if (!q.isNull()) {
       if (!getBool(q, "enabled", a.quiet.enabled, t, err)) return false;
@@ -317,6 +387,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       if (!getBool(sp, "alarms", a.speech.alarms, t, err)) return false;
       if (!getBool(sp, "demo", a.speech.demo, t, err)) return false;
       if (!getBool(sp, "indoor", a.speech.indoor, t, err)) return false;
+      if (!getBool(sp, "say_time", a.speech.say_time, t, err)) return false;
       if (!getNum(sp, "repeat", a.speech.repeat, t, err, 1, 3)) return false;
     }
     if (t) changed |= CHG_AUDIO;
@@ -426,6 +497,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       t = true;
     }
     if (!getNum(o, "refresh_hours", td.refresh_hours, t, err, 1, 24)) return false;
+    if (!getBool(o, "water_temp", td.water_temp, t, err)) return false;
     if (t) changed |= CHG_TIDE;
   }
 
@@ -489,6 +561,56 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (t) changed |= CHG_RADAR;
   }
 
+  o = src["webhook"];
+  if (!o.isNull()) {
+    t = false;
+    WebhookConfig& w = c.webhook;
+    if (!getBool(o, "enabled", w.enabled, t, err)) return false;
+    if (!getStr(o, "url", w.url, t, err)) return false;
+    if (w.url[0] && strncmp(w.url, "http://", 7) && strncmp(w.url, "https://", 8)) { err = "webhook.url: must start with http:// or https://"; return false; }
+    if (w.enabled && !w.url[0]) { err = "webhook.url: required when the webhook is enabled"; return false; }
+    if (!getStr(o, "title_key", w.title_key, t, err, false)) return false;
+    if (!getStr(o, "body_key", w.body_key, t, err, false)) return false;
+    if (!getStr(o, "header_name", w.header_name, t, err)) return false;
+    JsonVariantConst hv = o["header_value"];
+    if (hv.is<const char*>() && strcmp(hv.as<const char*>(), "***") != 0) {
+      if (!getStr(o, "header_value", w.header_value, t, err)) return false;
+    }
+    JsonVariantConst ms = o["min_severity"];
+    if (!ms.isNull()) {
+      if (!severity_parse(ms.as<const char*>(), w.min_severity)) { err = "webhook.min_severity: unknown severity"; return false; }
+      t = true;
+    }
+    if (!getBool(o, "on_alerts", w.on_alerts, t, err)) return false;
+    if (!getBool(o, "on_lightning", w.on_lightning, t, err)) return false;
+    if (!getBool(o, "on_alarms", w.on_alarms, t, err)) return false;
+    if (!getBool(o, "on_air", w.on_air, t, err)) return false;
+    if (!getBool(o, "on_boot", w.on_boot, t, err)) return false;
+    if (t) changed |= CHG_WEBHOOK;
+  }
+
+  JsonVariantConst ev = src["events"];
+  if (!ev.isNull()) {
+    if (!ev.is<JsonArrayConst>()) { err = "events: expected an array"; return false; }
+    uint8_t n = 0;
+    for (JsonObjectConst e : ev.as<JsonArrayConst>()) {
+      if (n >= MAX_EVENTS) break;
+      EventConfig& x = c.events.items[n];
+      x = EventConfig();
+      bool tt = false;
+      if (!getBool(e, "enabled", x.enabled, tt, err)) return false;
+      if (!getStr(e, "label", x.label, tt, err)) return false;
+      if (!getBool(e, "yearly", x.yearly, tt, err)) return false;
+      if (!getNum(e, "year", x.year, tt, err, 0, 2200)) return false;
+      if (!getNum(e, "month", x.month, tt, err, 0, 12)) return false;
+      if (!getNum(e, "day", x.day, tt, err, 0, 31)) return false;
+      if (!x.yearly && x.enabled && x.year < 2024) { err = "events.year: a one-off event needs a full year"; return false; }
+      n++;
+    }
+    for (uint8_t i = n; i < MAX_EVENTS; i++) c.events.items[i] = EventConfig();
+    changed |= CHG_EVENT;
+  }
+
   JsonVariantConst al = src["alarms"];
   if (!al.isNull()) {
     if (!al.is<JsonArrayConst>()) { err = "alarms: expected an array"; return false; }
@@ -510,6 +632,8 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       JsonVariantConst ch = a["chime"];
       if (!ch.isNull() && !chime_parse(ch.as<const char*>(), x.chime)) { err = "alarms.chime: unknown style"; return false; }
       if (!getStr(a, "label", x.label, tt, err)) return false;
+      if (!getBool(a, "once", x.once, tt, err)) return false;
+      if (!getNum(a, "snooze_min", x.snooze_min, tt, err, 1, 60)) return false;
       i++;
     }
     changed |= CHG_ALARMS;
@@ -528,6 +652,13 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["hostname"] = c.wifi.hostname;
   o["ap_pass"] = mask_secrets ? (c.wifi.ap_pass[0] ? "***" : "") : c.wifi.ap_pass;
   o["tx_power"] = c.wifi.tx_power;
+  o["ssid2"] = c.wifi.ssid2;
+  o["pass2"] = mask_secrets ? (c.wifi.pass2[0] ? "***" : "") : c.wifi.pass2;
+  o["dhcp"] = c.wifi.dhcp;
+  o["ip"] = c.wifi.ip;
+  o["gateway"] = c.wifi.gateway;
+  o["netmask"] = c.wifi.netmask;
+  o["dns"] = c.wifi.dns;
 
   o = dst["location"].to<JsonObject>();
   o["lat"] = c.location.lat;
@@ -541,6 +672,10 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["ntp2"] = c.time.ntp2;
   o["use_24h"] = c.time.use_24h;
   o["show_seconds"] = c.time.show_seconds;
+  o["date_order"] = c.time.date_order == 1 ? "dmy" : c.time.date_order == 2 ? "iso" : "mdy";
+  o["tz2_id"] = c.time.tz2_id;
+  o["tz2_posix"] = c.time.tz2_posix;
+  o["tz2_label"] = c.time.tz2_label;
 
   o = dst["weather"].to<JsonObject>();
   o["enabled"] = c.weather.enabled;
@@ -584,6 +719,19 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["precip_fx"] = d.precip_fx;
   o["holiday_themes"] = d.holiday_themes;
   o["moon_page"] = d.moon_page;
+  o["sleep_fade_sec"] = d.sleep_fade_sec;
+  {
+    JsonArray hl = o["holidays"].to<JsonArray>();
+    for (uint8_t i = 0; i < d.nholidays; i++) {
+      JsonObject h = hl.add<JsonObject>();
+      h["month"] = d.holidays[i].month;
+      h["day"] = d.holidays[i].day;
+      h["label"] = d.holidays[i].label;
+      char col[8];
+      snprintf(col, sizeof(col), "#%06lX", (unsigned long)(d.holidays[i].color & 0xFFFFFF));
+      h["color"] = col;
+    }
+  }
   JsonObject s = o["schedule"].to<JsonObject>();
   s["enabled"] = d.schedule.enabled;
   s["follow_sun"] = d.schedule.follow_sun;
@@ -639,6 +787,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   sp["alarms"] = a.speech.alarms;
   sp["demo"] = a.speech.demo;
   sp["indoor"] = a.speech.indoor;
+  sp["say_time"] = a.speech.say_time;
   sp["repeat"] = a.speech.repeat;
 
   o = dst["lightning"].to<JsonObject>();
@@ -693,6 +842,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["station_name"] = c.tide.station_name;
   o["unit"] = c.tide.unit == 1 ? "ft" : c.tide.unit == 2 ? "m" : "auto";
   o["refresh_hours"] = c.tide.refresh_hours;
+  o["water_temp"] = c.tide.water_temp;
 
   o = dst["remote"].to<JsonObject>();
   o["enabled"] = c.remote.enabled;
@@ -733,6 +883,36 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
     a["days"] = ds;
     a["chime"] = chime_name(x.chime);
     a["label"] = x.label;
+    a["once"] = x.once;
+    a["snooze_min"] = x.snooze_min;
+  }
+
+  o = dst["webhook"].to<JsonObject>();
+  o["enabled"] = c.webhook.enabled;
+  o["url"] = c.webhook.url;
+  o["title_key"] = c.webhook.title_key;
+  o["body_key"] = c.webhook.body_key;
+  o["header_name"] = c.webhook.header_name;
+  o["header_value"] = mask_secrets ? (c.webhook.header_value[0] ? "***" : "") : c.webhook.header_value;
+  o["on_alerts"] = c.webhook.on_alerts;
+  o["min_severity"] = severity_name(c.webhook.min_severity);
+  o["on_lightning"] = c.webhook.on_lightning;
+  o["on_alarms"] = c.webhook.on_alarms;
+  o["on_air"] = c.webhook.on_air;
+  o["on_boot"] = c.webhook.on_boot;
+
+  {
+    JsonArray evs = dst["events"].to<JsonArray>();
+    for (uint8_t i = 0; i < MAX_EVENTS; i++) {
+      const EventConfig& x = c.events.items[i];
+      JsonObject e = evs.add<JsonObject>();
+      e["enabled"] = x.enabled;
+      e["label"] = x.label;
+      e["yearly"] = x.yearly;
+      e["year"] = x.year;
+      e["month"] = x.month;
+      e["day"] = x.day;
+    }
   }
 
   dst["first_boot"] = c.first_boot;

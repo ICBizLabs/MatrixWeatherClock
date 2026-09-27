@@ -18,6 +18,7 @@
 #include "net/voice_pack.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "net/webhook.h"
 #include "util/moon.h"
 #include "util/zambretti.h"
 #include "io/i2c_bus.h"
@@ -48,11 +49,17 @@ namespace web {
       c["temp"] = w.cur.temp; c["feels"] = w.cur.feels; c["humidity"] = w.cur.humidity;
       c["wind"] = w.cur.wind; c["gust"] = w.cur.gust; c["wind_dir"] = w.cur.wind_dir;
       c["wmo"] = w.cur.wmo; c["text"] = wmo::text(w.cur.wmo); c["is_day"] = w.cur.is_day;
+      if (w.cur.uv >= 0) c["uv"] = serialized(String(w.cur.uv, 1));
+      if (w.cur.cloud >= 0) c["cloud"] = (int)lroundf(w.cur.cloud);
+      if (w.cur.vis >= 0) c["visibility"] = serialized(String(w.cur.vis, 1));
+      if (w.cur.rain >= 0) c["precip"] = serialized(String(w.cur.rain, 2));
       JsonArray d = o["daily"].to<JsonArray>();
       for (uint8_t i = 0; i < w.ndaily; i++) {
         JsonObject x = d.add<JsonObject>();
         x["date"] = w.daily[i].date; x["wmo"] = w.daily[i].wmo; x["text"] = wmo::text(w.daily[i].wmo);
         x["tmax"] = w.daily[i].tmax; x["tmin"] = w.daily[i].tmin; x["pop"] = w.daily[i].pop;
+        if (w.daily[i].rain_sum >= 0) x["rain_sum"] = serialized(String(w.daily[i].rain_sum, 2));
+        if (w.daily[i].uv_max >= 0) x["uv_max"] = serialized(String(w.daily[i].uv_max, 1));
       }
     }
 
@@ -137,6 +144,15 @@ namespace web {
       am["snooze_remaining_s"] = alarmclock::snoozeRemainingSec();
       am["timer_running"] = alarmclock::timerRunning();
       am["timer_remaining_s"] = alarmclock::timerRemainingSec();
+      am["striking"] = alarmclock::striking();
+      JsonObject sw = root["stopwatch"].to<JsonObject>();
+      sw["running"] = alarmclock::stopwatchRunning();
+      sw["active"] = alarmclock::stopwatchActive();
+      sw["ms"] = alarmclock::stopwatchMs();
+      JsonObject sl = root["sleep"].to<JsonObject>();
+      sl["pending"] = renderer::sleepPending();
+      sl["remaining_s"] = renderer::sleepRemainingSec();
+      sl["faded"] = renderer::sleepFadedOut();
       JsonObject mg = root["message"].to<JsonObject>();
       mg["active"] = renderer::hasMessage();
       mg["text"] = renderer::messageText();
@@ -188,6 +204,16 @@ namespace web {
       sp["progress"] = vps.progress;
       sp["available"] = vps.available_version;
       sp["error"] = vps.err;
+      sp["can_say_time"] = voice::canSayTime();
+      {
+        webhook::Status ws = webhook::status();
+        JsonObject wh = root["webhook"].to<JsonObject>();
+        wh["configured"] = ws.configured;
+        wh["sent"] = ws.sent;
+        wh["errors"] = ws.errors;
+        wh["error"] = ws.last_err;
+        wh["last_age_s"] = ws.last_ms ? (long)((millis() - ws.last_ms) / 1000) : -1L;
+      }
       {
         moon::Info mi = moon::at(time(nullptr));
         JsonObject mo = root["moon"].to<JsonObject>();
@@ -207,6 +233,7 @@ namespace web {
         to["station"] = td.station;
         to["unit"] = td.metric ? "m" : "ft";
         to["last_ok_age_s"] = ts.last_ok_ms ? (long)((millis() - ts.last_ok_ms) / 1000) : -1L;
+        if (td.water_temp > -999) { to["water_temp"] = serialized(String(td.water_temp, 1)); to["water_t"] = (long)td.water_t; }
         to["error"] = ts.err;
         tide::Extreme hi, lo; bool rising = false; float h = 0;
         if (td.valid && tide::now(td, time(nullptr), hi, lo, rising, h)) {
@@ -324,7 +351,7 @@ namespace web {
       app::cfgLock();
       AppConfig next = g_cfg;
       app::cfgUnlock();
-      uint16_t changed = 0;
+      uint32_t changed = 0;
       String err;
       if (!config_from_json(json.as<JsonObjectConst>(), next, changed, err)) { sendJsonError(r, 400, err); return; }
       // timezone id from the table fills tz_posix unless a custom string was sent
@@ -333,6 +360,10 @@ namespace web {
         const char* posix = tz_posix_for(tj["tz_id"].as<const char*>());
         if (posix) strlcpy(next.time.tz_posix, posix, sizeof(next.time.tz_posix));
       }
+      if (!tj.isNull() && tj["tz2_id"].is<const char*>() && !tj["tz2_posix"].is<const char*>()) {
+        const char* p2 = tz_posix_for(tj["tz2_id"].as<const char*>());
+        strlcpy(next.time.tz2_posix, p2 ? p2 : "", sizeof(next.time.tz2_posix));
+      }
       if ((changed & CHG_ALERTS) && next.alerts.enabled && next.alerts.user_agent_contact[0] == '\0') { sendJsonError(r, 400, "alerts.user_agent_contact: NWS requires a contact (e-mail or URL)"); return; }
       app::stageConfig(next, changed);
       AsyncJsonResponse* res = new AsyncJsonResponse();
@@ -340,10 +371,11 @@ namespace web {
       root["ok"] = true;
       JsonArray applied = root["applied"].to<JsonArray>();
       JsonArray reboot = root["reboot_required"].to<JsonArray>();
-      struct { uint16_t bit; const char* name; bool reboot; } sections[] = {
+      struct { uint32_t bit; const char* name; bool reboot; } sections[] = {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
         { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false }, { CHG_REMOTE, "remote", false }, { CHG_TIDE, "tide", false },
-        { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false } };
+        { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false },
+        { CHG_WEBHOOK, "webhook", false }, { CHG_EVENT, "events", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
       r->send(res);
@@ -416,6 +448,50 @@ namespace web {
       app::cfgUnlock();
       renderer::showMessage(text, (uint32_t)sec * 1000UL, rgb);
       if (o["chime"] | false) audio_out::chime(style, o["force"] | false);
+      r->send(200, "application/json", "{\"ok\":true}");
+    }
+
+    void handleSleep(AsyncWebServerRequest* r, JsonVariant& json) {
+      JsonObjectConst o = json.as<JsonObjectConst>();
+      long m = o["minutes"] | -1L;
+      if (m < 0) { sendJsonError(r, 400, "minutes required (0 cancels)"); return; }
+      if (m > 720) { sendJsonError(r, 400, "minutes out of range (0..720)"); return; }
+      renderer::startSleep((uint32_t)m);
+      r->send(200, "application/json", "{\"ok\":true}");
+    }
+
+    void handleStopwatch(AsyncWebServerRequest* r, JsonVariant& json) {
+      const char* a = json.as<JsonObjectConst>()["action"] | "toggle";
+      if (!strcmp(a, "start")) alarmclock::stopwatchStart();
+      else if (!strcmp(a, "stop")) alarmclock::stopwatchStop();
+      else if (!strcmp(a, "reset")) alarmclock::stopwatchReset();
+      else if (!strcmp(a, "toggle")) alarmclock::stopwatchToggle();
+      else { sendJsonError(r, 400, "action: start, stop, reset or toggle"); return; }
+      AsyncJsonResponse* res = new AsyncJsonResponse();
+      JsonObject root = res->getRoot().to<JsonObject>();
+      root["ok"] = true;
+      root["running"] = alarmclock::stopwatchRunning();
+      root["ms"] = alarmclock::stopwatchMs();
+      res->setLength();
+      r->send(res);
+    }
+
+    void handleTestWebhook(AsyncWebServerRequest* r) {
+      app::cfgLock();
+      const bool configured = g_cfg.webhook.enabled && g_cfg.webhook.url[0];
+      app::cfgUnlock();
+      if (!configured) { sendJsonError(r, 409, "webhook not configured"); return; }
+      webhook::notify(webhook::Event::Test, "Matrix Weather Clock", "Test notification from your clock");
+      r->send(200, "application/json", "{\"ok\":true}");
+    }
+
+    void handleSayTime(AsyncWebServerRequest* r) {
+      struct tm lt;
+      if (!timesvc::localNow(lt)) { sendJsonError(r, 409, "clock not set yet"); return; }
+      if (!voice::sayTime(ChimeStyle::None, lt.tm_hour, lt.tm_min, r->hasParam("force"))) {
+        sendJsonError(r, 409, voice::lastError());
+        return;
+      }
       r->send(200, "application/json", "{\"ok\":true}");
     }
 
@@ -649,5 +725,13 @@ namespace web {
     auto* timer = new AsyncCallbackJsonWebHandler("/api/timer", handleTimer);
     timer->setMethod(HTTP_POST);
     server.addHandler(timer);
+    auto* sleep = new AsyncCallbackJsonWebHandler("/api/sleep", handleSleep);
+    sleep->setMethod(HTTP_POST);
+    server.addHandler(sleep);
+    auto* stopwatch = new AsyncCallbackJsonWebHandler("/api/stopwatch", handleStopwatch);
+    stopwatch->setMethod(HTTP_POST);
+    server.addHandler(stopwatch);
+    server.on("/api/test/webhook", HTTP_POST, handleTestWebhook);
+    server.on("/api/test/say-time", HTTP_POST, handleSayTime);
   }
 }

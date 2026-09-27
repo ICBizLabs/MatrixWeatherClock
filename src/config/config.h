@@ -7,7 +7,8 @@ enum class Severity : uint8_t { Unknown = 0, Minor, Moderate, Severe, Extreme };
 const char* severity_name(Severity s);
 bool        severity_parse(const char* s, Severity& out);
 
-enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_TIDE, PAGE_MOON, PAGE_COUNT };
+enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_TIDE, PAGE_MOON,
+                          PAGE_UV, PAGE_SKY, PAGE_RAIN, PAGE_WATER, PAGE_WORLD, PAGE_EVENT, PAGE_COUNT };
 const char* page_name(uint8_t id);
 bool        page_parse(const char* s, uint8_t& out);
 
@@ -34,6 +35,13 @@ struct WifiConfig {
   char hostname[32] = "matrixweatherclock";
   char ap_pass[65] = "";        // empty = open access point
   uint8_t tx_power = 34;        // wifi_power_t value: 34 = 8.5 dBm, 78 = 19.5 dBm
+  char ssid2[33] = "";          // optional second network, tried when the first will not associate
+  char pass2[65] = "";
+  bool dhcp = true;             // false = use the static address below (applied on the next connect)
+  char ip[16] = "";
+  char gateway[16] = "";
+  char netmask[16] = "255.255.255.0";
+  char dns[16] = "";
 };
 struct LocationConfig {
   float lat = 39.7392f;
@@ -47,6 +55,10 @@ struct TimeConfig {
   char ntp2[48] = "time.nist.gov";
   bool use_24h = false;
   bool show_seconds = false;
+  uint8_t date_order = 0;       // 0 = month first (SEP 27), 1 = day first (27 SEP), 2 = ISO (09-27)
+  char tz2_id[40] = "";         // optional second zone for the world-clock page; "" = off
+  char tz2_posix[64] = "";
+  char tz2_label[10] = "";      // short label on that page, e.g. "LONDON"
 };
 struct WeatherConfig {
   bool enabled = true;
@@ -89,6 +101,13 @@ struct ColorsConfig {            // RGB888
   uint32_t hi = 0xFF8060;
   uint32_t lo = 0x60A0FF;
 };
+constexpr uint8_t MAX_CUSTOM_HOLIDAYS = 4;
+struct HolidayConfig {           // your own dates, on top of the nine built-in holidays
+  uint8_t month = 0;             // 1..12; 0 = unused
+  uint8_t day = 0;
+  char label[16] = "";
+  uint32_t color = 0xFFFFFF;     // clock colour for the day
+};
 struct DisplayConfig {
   uint8_t brightness = 128;
   float gamma = 2.2f;
@@ -104,6 +123,9 @@ struct DisplayConfig {
   bool precip_fx = true;            // animated rain / snow / lightning behind the weather pages
   bool holiday_themes = true;       // holiday colours and effects on special dates
   bool moon_page = true;            // keep the moon-phase page in the rotation
+  uint8_t sleep_fade_sec = 30;      // the sleep timer fades the panel out over this long
+  HolidayConfig holidays[MAX_CUSTOM_HOLIDAYS];
+  uint8_t nholidays = 0;
   ScheduleConfig schedule;
   NightModeConfig night;
   ColorsConfig colors;
@@ -134,6 +156,7 @@ struct SpeechConfig {         // spoken announcements from the downloaded voice 
   bool alarms = true;           // "Alarm" / "Timer finished" once when the ring starts
   bool demo = true;             // scenario names in demo mode (with demo sounds)
   bool indoor = true;           // "Air quality poor"
+  bool say_time = true;         // "It is three fifteen PM" on request, and on the hour when hourly_speak is set
   uint8_t repeat = 1;           // say each announcement 1..3 times
 };
 struct AudioConfig {
@@ -142,6 +165,11 @@ struct AudioConfig {
   ChimeStyle chime = ChimeStyle::TwoTone;              // alerts, lightning, messages, pushes
   ChimeStyle chime_extreme = ChimeStyle::EasAttention; // Extreme alerts (tornado, hurricane, ...)
   uint16_t repeat_min = 0;      // re-chime interval while an unacknowledged alert stands, 0 = once
+  bool hourly_chime = false;    // chime on the hour (never during quiet hours or while an alarm rings)
+  bool hourly_strike = false;   // strike the hour count (1..12) instead of a single chime
+  bool hourly_half = false;     // one chime on the half hour as well
+  bool hourly_speak = false;    // speak the time on the hour (needs the voice pack)
+  ChimeStyle hourly_style = ChimeStyle::Doorbell;
   QuietConfig quiet;
   SpeechConfig speech;
 };
@@ -152,6 +180,8 @@ struct AlarmConfig {
   uint8_t days = 0x1F;          // bit 0 = Monday ... bit 6 = Sunday
   ChimeStyle chime = ChimeStyle::TripleBeep;
   char label[16] = "";
+  bool once = false;            // disable the alarm again after it fires (one-off)
+  uint8_t snooze_min = 9;       // 1..60
 };
 struct AlarmsConfig { AlarmConfig items[MAX_ALARMS]; };
 
@@ -235,7 +265,34 @@ struct TideConfig {               // NOAA CO-OPS tide predictions (US coasts)
   char station_name[40] = "";
   uint8_t unit = 0;               // 0 auto (feet with imperial units, metres otherwise), 1 feet, 2 metres
   uint8_t refresh_hours = 6;
+  bool water_temp = true;         // also read the station's water temperature, when it reports one
 };
+
+struct WebhookConfig {            // plain HTTP POST to a URL of your choice: ntfy, Gotify, Home Assistant, Discord
+  bool enabled = false;
+  char url[160] = "";
+  char title_key[16] = "title";   // JSON field names, so one shape fits several services
+  char body_key[16] = "message";
+  char header_name[40] = "";      // one optional extra header, e.g. Authorization
+  char header_value[96] = "";
+  bool on_alerts = true;
+  Severity min_severity = Severity::Severe;
+  bool on_lightning = false;
+  bool on_alarms = false;
+  bool on_air = false;
+  bool on_boot = false;
+};
+
+constexpr uint8_t MAX_EVENTS = 3;
+struct EventConfig {              // countdown to a date
+  bool enabled = false;
+  char label[16] = "";
+  uint16_t year = 0;              // ignored when yearly
+  uint8_t month = 0;              // 1..12; 0 = unused
+  uint8_t day = 0;
+  bool yearly = false;            // repeats every year (birthdays, anniversaries)
+};
+struct EventsConfig { EventConfig items[MAX_EVENTS]; };
 
 struct AppConfig {
   WifiConfig wifi;
@@ -254,19 +311,22 @@ struct AppConfig {
   RadarConfig radar;
   RemoteConfig remote;
   TideConfig tide;
+  WebhookConfig webhook;
+  EventsConfig events;
   bool first_boot = true;
 };
 
 // Bit flags telling which sections a JSON merge touched (used to apply changes live / ask for a reboot)
-enum : uint16_t {
+enum : uint32_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
-  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192, CHG_REMOTE = 16384, CHG_TIDE = 32768
+  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192, CHG_REMOTE = 16384, CHG_TIDE = 32768,
+  CHG_WEBHOOK = 65536, CHG_EVENT = 131072
 };
 
 extern AppConfig g_cfg;
 
 bool config_load();                                   // LittleFS /config.json -> g_cfg (defaults when missing/invalid)
 bool config_save(const AppConfig& c);                 // write /config.tmp then rename
-bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, String& err);  // partial merge + validation
+bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, String& err);  // partial merge + validation
 void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets);
 void config_factory_reset();                          // removes /config.json and reboots

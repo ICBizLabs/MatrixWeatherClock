@@ -205,7 +205,7 @@ namespace alerts {
     return fire;
   }
 
-  bool takeNewForNotify(const AlertsConfig& cfg, Severity min, char* event, size_t eventLen, char* headline, size_t headlineLen) {
+  bool takeNewForNotify(const AlertsConfig& cfg, Severity min, char* event, size_t eventLen, char* headline, size_t headlineLen, Severity* sevOut) {
     if (!take()) return false;
     bool found = false;
     for (size_t i = 0; i < count_ && !found; i++) {
@@ -214,6 +214,7 @@ namespace alerts {
       it.notified = true;
       strlcpy(event, it.event, eventLen);
       strlcpy(headline, it.headline, headlineLen);
+      if (sevOut) *sevOut = it.sev;
       found = true;
     }
     give();

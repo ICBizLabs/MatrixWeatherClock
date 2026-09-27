@@ -55,3 +55,73 @@ pio device monitor           # serial log at 115200
    K2 long = test chime, K3 short = refresh data, K3 long = reboot.
    `curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweatherclock.local/update` reboots into the
    new version with settings intact.
+8. **0.14.0 additions** – verified on the device at 192.168.4.56 on 2026-09-27, except where noted.
+   Results: config flags, new pages, weather values, water temperature, webhook, stopwatch and sleep timer all pass.
+   The voice pack download wedged the clock once and is the open item; see the end of this section.
+   **Config flag width** – save each of the fifteen existing sections from the web UI and confirm the log line
+   `config: applying changes 0x0.....` names the expected bit and the change actually takes effect; the panel section
+   must still answer `reboot_required`. Then save the two new sections (`webhook`, `events`) and confirm the same.
+   This is the check that the `uint16_t` to `uint32_t` widening did not break the existing bits.
+   **New pages** – add `uv, sky, rain, water, world, event` to `display.pages`. Each must either draw or hide itself:
+   `curl -s http://matrixweatherclock.local/api/weather | jq .cur` should carry `uv`, `cloud`, `visibility` and `precip`,
+   and `.daily[0]` should carry `rain_sum` and `uv_max`. Check the ultraviolet page's band colour against the number,
+   and that visibility reads in miles with imperial units (Open-Meteo returns feet on that unit set, kilometres
+   otherwise, which is the conversion most likely to be wrong).
+   **Water temperature** – with a station that reports one, `/api/status | jq .tide.water_temp` appears within a
+   refresh and the `water` page shows it. A station without a thermometer must leave the field absent and the page
+   hidden, not show a wrong number.
+   **World clock** – pick a second zone on the Location & Weather tab, confirm the `world` page shows that zone's time
+   and, importantly, that the main clock and the tide times are still right afterwards. The timezone is process-global
+   and the conversion swaps it behind a guard, so this is where a regression would show.
+   **Countdowns** – set a one-off and a yearly date, confirm the `event` page counts down, says `TOMORROW` the day
+   before and `TODAY` on the day, and that a yearly date rolls to next year once it has passed.
+   **Hourly chime** – set the clock a minute before the hour with `hourly_chime` and `hourly_strike` on: the hour
+   should strike the right number of times about a second apart, then speak the time if `hourly_speak` is on. Inside
+   quiet hours nothing should sound. While an alarm rings or is snoozed, nothing should sound.
+   **Spoken time** – `curl -X POST 'http://matrixweatherclock.local/api/test/say-time?force=1'` should say the time as one
+   utterance with no gaps between the words. It needs voice pack v8; on an older pack it must answer 409 rather than
+   speak a partial phrase. Check both 12- and 24-hour settings, and minutes 0, 5, 15, 30 and 47.
+   **Stopwatch** – `POST /api/stopwatch {"action":"start"}`, confirm it counts up on the panel, pause and confirm it
+   holds, reset and confirm it leaves the display.
+   **Sleep timer** – `POST /api/sleep {"minutes":1}`, confirm the panel fades to black over `sleep_fade_sec` and stays
+   dark, then `{"minutes":0}` restores the scheduled brightness.
+   **One-off alarm** – set an alarm one minute out with `once` on, let it ring, then confirm `/api/config` shows it
+   disabled and that it stays disabled after a reboot.
+   **Webhook** – point it at a request bin or `ntfy.sh`, press *Send a test*, and confirm the body carries the two
+   configured field names plus `event` and `device`. Inject a test alert and confirm it fires for alerts too. Point it
+   at a dead host and confirm `/api/status.webhook.errors` counts up without disturbing anything else.
+   **Two networks and static address** – save a second SSID, take the first network down, and confirm the log shows
+   `wifi: retrying STA on <second>` and the clock associates. Then set a static address, save, and confirm the clock
+   comes back on that address with working DNS. Getting this wrong takes the device off the network, so have the
+   serial console or the setup access point as a way back.
+   **Memory** – with radar on and the web UI open, `curl -s http://matrixweatherclock.local/api/status | jq '.sys'` must
+   keep `heap_largest` above 18432 and `heap_free` above 47104, which is what the TLS guard needs. Static internal RAM
+   grew from 67,560 to 70,696 bytes in this release, so confirm HTTPS still works: watch a tide fetch and an update
+   check succeed rather than logging `low memory for TLS`.
+
+   **Results, 2026-09-27, firmware 0.14.0 on the device.**
+   - Flag widening: all seventeen sections apply. The log shows `applying changes 0x030000` for `webhook` and
+     `events`, which is the proof that the two bits above 16 survive; under the old `uint16_t` they were zero. The
+     panel section still answers `reboot_required`. Note the OTA upload needs `curl -H "Expect:"`; without it the
+     async server leaves the updater engaged and the next attempt fails with `begin failed`, needing a reboot.
+   - Memory: steady state is 101 KB free internal heap and a 58 KB largest block, against the TLS guard's 46 KB and
+     18 KB. Right after an OTA the largest block dips to 34 KB, still comfortably above the guard.
+   - Weather: `uv` 6.9, `cloud_cover` 0%, `visibility` 25.8 miles, `rain_sum` and `uv_max` all present. Visibility
+     was cross-checked against the raw feed: 136,154 ft / 5280 = 25.8 miles, so the imperial unit really is feet.
+   - Pages: all six draw correctly. `uv` showed "UV 7 / HIGH" in the orange 6-8 band, `sky` "CLOUD 0% / VIS 20 MI",
+     `rain` "RAIN 0.00\" / CHANCE 0%", `event` "CHRISTMAS / 89 DAYS" (correct for 27 Sep to 25 Dec), `world` 7:01 PM
+     UTC beside a local 3:01 PM Eastern, which also confirms the timezone swap leaves the main clock alone.
+   - Water temperature: station 8727012 does not offer the product, and the page correctly showed "NO WATER TEMP"
+     rather than a wrong number. Pointing at 8726724 (Clearwater Beach) gave 82.0 F, matching NOAA exactly.
+   - Webhook: both the test and an injected alert arrived at a listener with the configured field names, the
+     `event` and `device` fields, and the custom `X-Clock-Token` header.
+   - Stopwatch and sleep timer: counted 7.0 s on the panel matching 7,076 ms from the API; sleep armed, reported
+     120 s remaining and cancelled. Bad inputs rejected with 400, unconfigured webhook and pack-less spoken time
+     with 409.
+   - **Open: the voice pack.** Fetching pack v8 (4.4 MB) from a local HTTP server reached 35% and the clock then
+     went off the network and did not return until it was power-cycled. It recorded no crash (reset reason
+     power-on, black box clean), so it hung rather than panicking; a watchdog would have shown. The old pack
+     survived intact and `speech.state` stayed `installed` with no error, so the swap logic is safe. Spoken time
+     and `hourly_speak` therefore remain unverified. Before retrying, note the pack grew from 3.98 to 4.4 MB, so
+     old plus new now occupy 8.4 MB of the 9.9 MB filesystem during the swap; that is within the free-space check
+     but tighter than before. Retry with nothing else polling the device, and watch the serial console.

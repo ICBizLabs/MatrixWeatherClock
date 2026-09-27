@@ -16,4 +16,11 @@ namespace timesvc {
   bool localNow(struct tm& lt, uint16_t* ms = nullptr);
   Status status();
   const char* sourceName(Source s);
+
+  // The C library timezone is process-global, so anything that converts a time takes this guard. zoneNow() swaps TZ
+  // to a second zone, reads the clock and swaps back, which is how the world-clock page works without a second
+  // timezone database. Recursive, so nesting is safe.
+  void tzLock();
+  void tzUnlock();
+  bool zoneNow(const char* posix, struct tm& out);   // false when posix is empty or the clock is not set yet
 }

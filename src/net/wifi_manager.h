@@ -10,6 +10,8 @@ namespace wifi_mgr {
   void loop();
   void applyCredentials(const WifiConfig& wc);   // new SSID/password from the UI
   bool isConnected();
+  const char* activeSsid();          // which of the two saved networks is being used
+  bool staticIp();
   bool apActive();
   String apSsid();
   IPAddress ip();

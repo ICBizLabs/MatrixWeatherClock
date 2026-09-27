@@ -15,23 +15,41 @@ namespace wifi_mgr {
     bool connectedEvent = false;
     uint32_t stateSince = 0;
     uint32_t lastStaRetry = 0;
+    bool useSecond = false;          // alternate between the two saved networks on every retry
     uint32_t apDropAt = 0;
     String apName;
     const IPAddress AP_IP(4, 3, 2, 1);
     constexpr uint32_t CONNECT_TIMEOUT_MS = 20000;
     constexpr uint32_t STA_RETRY_MS = 60000;
 
+    // A static address has to be set before WiFi.begin(). An empty or unparsable field falls back to DHCP rather
+    // than leaving the radio unconfigured.
+    void applyStaticIp() {
+      if (cfg.dhcp) { WiFi.config(IPAddress(), IPAddress(), IPAddress(), IPAddress()); return; }
+      IPAddress ip, gw, mask, dns1;
+      if (!ip.fromString(cfg.ip) || !gw.fromString(cfg.gateway)) { LOGW("wifi: static address incomplete, using DHCP"); return; }
+      if (!mask.fromString(cfg.netmask)) mask = IPAddress(255, 255, 255, 0);
+      if (!dns1.fromString(cfg.dns)) dns1 = gw;
+      if (WiFi.config(ip, gw, mask, dns1)) LOGI("wifi: static %s gw %s", ip.toString().c_str(), gw.toString().c_str());
+      else LOGW("wifi: static address rejected, using DHCP");
+    }
+
+    const char* staSsid() { return (useSecond && cfg.ssid2[0]) ? cfg.ssid2 : cfg.ssid; }
+    const char* staPass() { return (useSecond && cfg.ssid2[0]) ? cfg.pass2 : cfg.pass; }
+
     void startSta() {
-      if (!cfg.ssid[0]) return;
+      if (!cfg.ssid[0] && !cfg.ssid2[0]) return;
+      if (!cfg.ssid[0]) useSecond = true;               // only the second one is set
       WiFi.setHostname(cfg.hostname);
       WiFi.setSleep(false);
       WiFi.setAutoReconnect(false);
-      WiFi.begin(cfg.ssid, cfg.pass);
+      applyStaticIp();
+      WiFi.begin(staSsid(), staPass());
       WiFi.setTxPower((wifi_power_t)cfg.tx_power);
       state = State::Connecting;
       stateSince = millis();
       lastStaRetry = millis();
-      LOGI("wifi: connecting to %s", cfg.ssid);
+      LOGI("wifi: connecting to %s", staSsid());
     }
 
     void startAp() {
@@ -77,7 +95,7 @@ namespace wifi_mgr {
   void begin(const WifiConfig& wc) {
     cfg = wc;
     WiFi.persistent(false);
-    if (cfg.ssid[0]) { WiFi.mode(WIFI_STA); startSta(); }
+    if (cfg.ssid[0] || cfg.ssid2[0]) { WiFi.mode(WIFI_STA); startSta(); }
     else startAp();
   }
 
@@ -88,7 +106,11 @@ namespace wifi_mgr {
     switch (state) {
       case State::Connecting:
         if (st == WL_CONNECTED) onConnected();
-        else if (now - stateSince > CONNECT_TIMEOUT_MS) { LOGW("wifi: connect timeout"); startAp(); }
+        else if (now - stateSince > CONNECT_TIMEOUT_MS) {
+          LOGW("wifi: connect timeout on %s", staSsid());
+          if (cfg.ssid2[0] && cfg.ssid[0] && !useSecond) { useSecond = true; WiFi.disconnect(); startSta(); }
+          else { useSecond = false; startAp(); }
+        }
         break;
       case State::Connected:
         if (st != WL_CONNECTED) { LOGW("wifi: link lost, reconnecting"); mdnsUp = false; MDNS.end(); WiFi.disconnect(); startSta(); }
@@ -96,7 +118,13 @@ namespace wifi_mgr {
         break;
       case State::Ap:
         if (st == WL_CONNECTED) onConnected();
-        else if (cfg.ssid[0] && now - lastStaRetry > STA_RETRY_MS) { lastStaRetry = now; WiFi.begin(cfg.ssid, cfg.pass); LOGI("wifi: retrying STA"); }
+        else if ((cfg.ssid[0] || cfg.ssid2[0]) && now - lastStaRetry > STA_RETRY_MS) {
+          lastStaRetry = now;
+          if (cfg.ssid[0] && cfg.ssid2[0]) useSecond = !useSecond;
+          applyStaticIp();
+          WiFi.begin(staSsid(), staPass());
+          LOGI("wifi: retrying STA on %s", staSsid());
+        }
         break;
       default: break;
     }
@@ -104,6 +132,7 @@ namespace wifi_mgr {
 
   void applyCredentials(const WifiConfig& wc) {
     cfg = wc;
+    useSecond = false;
     mdnsUp = false;
     MDNS.end();
     WiFi.disconnect();
@@ -112,6 +141,8 @@ namespace wifi_mgr {
   }
 
   bool isConnected() { return WiFi.status() == WL_CONNECTED; }
+  const char* activeSsid() { return staSsid(); }
+  bool staticIp() { return !cfg.dhcp; }
   bool apActive() { return apUp; }
   String apSsid() { return apName; }
   IPAddress ip() { return isConnected() ? WiFi.localIP() : (apUp ? AP_IP : IPAddress()); }

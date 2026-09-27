@@ -8,12 +8,12 @@ namespace app {
   void loop();                                              // applies staged config, executes reboot / factory reset
   void cfgLock();
   void cfgUnlock();
-  bool stageConfig(const AppConfig& next, uint16_t changed); // from async web handlers; applied on the main loop
+  bool stageConfig(const AppConfig& next, uint32_t changed); // from async web handlers; applied on the main loop
   void requestReboot(uint32_t delay_ms);
   void requestFactoryReset();
   bool rebootPending();
   uint32_t uptimeSec();
-  uint16_t rebootRequiredFlags();                            // CHG_* bits that need a reboot to take effect
+  uint32_t rebootRequiredFlags();                            // CHG_* bits that need a reboot to take effect
 
   // Crash black box: the last activity is kept in RTC memory (survives resets, not power loss) and reported at boot.
   struct LastReset { bool valid = false; int reason = 0; char where[40] = ""; uint32_t uptime_s = 0; uint32_t heap = 0; };

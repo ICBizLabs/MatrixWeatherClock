@@ -5,7 +5,8 @@
 namespace actions {
   enum class Id : uint8_t {
     None = 0, NextPage, Dismiss, ShowRadar, ShowForecast, ShowHourly, AckAlerts, AlarmStop, AlarmSnooze,
-    Timer5, Timer10, Timer30, TimerCancel, BrightUp, BrightDown, Night, Mute, Demo, Refresh, ShowIp, Chime, COUNT
+    Timer5, Timer10, Timer30, TimerCancel, BrightUp, BrightDown, Night, Mute, Demo, Refresh, ShowIp, Chime,
+    SayTime, StopwatchToggle, StopwatchReset, Sleep30, Sleep60, SleepCancel, COUNT
   };
   const char* name(Id id);                 // "next_page"
   const char* label(Id id);                // "Next page"

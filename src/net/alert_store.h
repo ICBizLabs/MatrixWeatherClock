@@ -49,7 +49,9 @@ namespace alerts {
   void view(const AlertsConfig& cfg, AlertView& out);
   // true once per (re)chime; top = highest severity that fired, event = its event name (for the spoken announcement)
   bool takeNewForChime(const AlertsConfig& cfg, uint16_t repeat_min, uint32_t now_ms, Severity* top = nullptr, char* event = nullptr, size_t eventLen = 0);
-  bool takeNewForNotify(const AlertsConfig& cfg, Severity min, char* event, size_t eventLen, char* headline, size_t headlineLen);   // one un-notified alert
+  // One un-notified alert at or above `min`. sevOut reports its severity so several sinks with different
+  // thresholds can share the single consume.
+  bool takeNewForNotify(const AlertsConfig& cfg, Severity min, char* event, size_t eventLen, char* headline, size_t headlineLen, Severity* sevOut = nullptr);
   size_t count();
   bool stale();
   void toJson(JsonArray arr, const AlertsConfig& cfg, bool all);

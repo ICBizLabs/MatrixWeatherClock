@@ -18,6 +18,7 @@
 #include "net/lightning.h"
 #include "io/env_sensor.h"
 #include "util/zambretti.h"
+#include "util/log.h"
 #include "net/radar.h"
 #include "net/tide.h"
 #include "util/moon.h"
@@ -415,6 +416,73 @@ namespace renderer {
       if (2 + w2 + 3 + pc.textWidth(hb) <= W) pc.drawTextRight(hb, W - 1, Y_L2 + 2, colText());
       classicFont(pc);
     }
+    // ---- pages added in 0.14.0 ----
+    void drawWaterPage(Canvas& pc, const tide::Data& d) {
+      classicFont(pc);
+      if (d.water_temp <= -999) { pc.drawTextCentered("NO WATER", W / 2, Y_L1, C_GREY); pc.drawTextCentered("TEMP", W / 2, Y_L2, C_GREY); return; }
+      char l2[24];
+      tempText(l2, sizeof(l2), d.water_temp, true);
+      pc.drawTextCentered("WATER", W / 2, Y_L1, colDate());
+      pc.drawTextCentered(l2, W / 2, Y_L2, Canvas::rgb(0x40C0FF));
+    }
+    void drawWorldPage(Canvas& pc) {
+      classicFont(pc);
+      struct tm z;
+      if (!timesvc::zoneNow(g_cfg.time.tz2_posix, z)) { pc.drawTextCentered("NO 2ND ZONE", W / 2, Y_SINGLE, C_GREY); return; }
+      char t[12];
+      fmtClock12(t, sizeof(t), z.tm_hour * 60 + z.tm_min);
+      const char* lbl = g_cfg.time.tz2_label[0] ? g_cfg.time.tz2_label : "ELSEWHERE";
+      pc.drawTextCentered(lbl, W / 2, Y_L1, colDate());
+      pc.drawTextCentered(t, W / 2, Y_L2, colText());
+    }
+    // Whole days from today to the event, in local time. Yearly events roll to next year once they are past.
+    int32_t eventDaysAway(const EventConfig& e, const struct tm& today) {
+      if (!e.enabled || !e.month || !e.day) return -1;
+      struct tm a = {}, b = {};
+      a.tm_year = today.tm_year; a.tm_mon = today.tm_mon; a.tm_mday = today.tm_mday; a.tm_hour = 12; a.tm_isdst = -1;
+      b.tm_mon = e.month - 1; b.tm_mday = e.day; b.tm_hour = 12; b.tm_isdst = -1;
+      b.tm_year = e.yearly ? today.tm_year : (int)e.year - 1900;
+      timesvc::tzLock();
+      time_t ta = mktime(&a), tb = mktime(&b);
+      if (e.yearly && tb < ta) { b.tm_year = today.tm_year + 1; b.tm_isdst = -1; tb = mktime(&b); }
+      timesvc::tzUnlock();
+      if (ta <= 0 || tb <= 0) return -1;
+      return (int32_t)lroundf((float)(tb - ta) / 86400.0f);
+    }
+    int8_t nextEvent(const struct tm& today, int32_t& daysOut) {
+      int8_t best = -1;
+      int32_t bestDays = 0;
+      for (uint8_t i = 0; i < MAX_EVENTS; i++) {
+        int32_t d = eventDaysAway(g_cfg.events.items[i], today);
+        if (d < 0) continue;
+        if (best < 0 || d < bestDays) { best = (int8_t)i; bestDays = d; }
+      }
+      daysOut = bestDays;
+      return best;
+    }
+    void drawEventPage(Canvas& pc, const struct tm& lt, bool timeValid) {
+      classicFont(pc);
+      int32_t days = 0;
+      const int8_t i = timeValid ? nextEvent(lt, days) : -1;
+      if (i < 0) { pc.drawTextCentered("NO EVENTS", W / 2, Y_SINGLE, C_GREY); return; }
+      const EventConfig& e = g_cfg.events.items[i];
+      char l2[24];
+      if (days == 0) snprintf(l2, sizeof(l2), "TODAY");
+      else if (days == 1) snprintf(l2, sizeof(l2), "TOMORROW");
+      else snprintf(l2, sizeof(l2), "%ld DAYS", (long)days);
+      pc.drawTextCentered(e.label[0] ? e.label : "EVENT", W / 2, Y_L1, colDate());
+      pc.drawTextCentered(l2, W / 2, Y_L2, days == 0 ? C_ORANGE : colText());
+    }
+    void drawStopwatch(Canvas& pc) {
+      classicFont(pc);
+      const uint32_t ms = alarmclock::stopwatchMs();
+      const uint32_t s = ms / 1000;
+      char t[16];
+      if (s >= 3600) snprintf(t, sizeof(t), "%lu:%02lu:%02lu", (unsigned long)(s / 3600), (unsigned long)(s % 3600 / 60), (unsigned long)(s % 60));
+      else snprintf(t, sizeof(t), "%lu:%02lu.%lu", (unsigned long)(s / 60), (unsigned long)(s % 60), (unsigned long)(ms % 1000 / 100));
+      pc.drawTextCentered(alarmclock::stopwatchRunning() ? "STOPWATCH" : "STOPPED", W / 2, Y_L1, colDate());
+      pc.drawTextCentered(t, W / 2, Y_L2, colText());
+    }
     // a page in the rotation is shown only when it has something to show
     bool pageAvailable(uint8_t id) {
       if (demo.on) return true;
@@ -422,6 +490,12 @@ namespace renderer {
         case PAGE_INDOOR: case PAGE_BARO: return env_sensor::present();
         case PAGE_AIR: return env_sensor::hasGas();
         case PAGE_TIDE: { tide::Data td; return g_cfg.tide.enabled && tide::get(td); }
+        case PAGE_WATER: { tide::Data td; return g_cfg.tide.enabled && g_cfg.tide.water_temp && tide::get(td) && td.water_temp > -999; }
+        case PAGE_UV: return wx.valid && wx.cur.uv >= 0;
+        case PAGE_SKY: return wx.valid && (wx.cur.cloud >= 0 || wx.cur.vis >= 0);
+        case PAGE_RAIN: return wx.valid && wx.ndaily;
+        case PAGE_WORLD: return g_cfg.time.tz2_posix[0] != '\0';
+        case PAGE_EVENT: { struct tm lt; int32_t d; return timesvc::localNow(lt) && nextEvent(lt, d) >= 0; }
         default: return true;
       }
     }
@@ -432,12 +506,17 @@ namespace renderer {
       if (id == PAGE_INDOOR) { drawIndoorPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
       if (id == PAGE_AIR) { drawAirPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
       if (id == PAGE_BARO) { drawBaroPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading(), now); return; }
+      if (id == PAGE_WATER) { tide::Data td; if (demo.on) td = demoTide; else tide::get(td); drawWaterPage(pc, td); return; }
+      if (id == PAGE_WORLD) { drawWorldPage(pc); return; }
+      if (id == PAGE_EVENT) { drawEventPage(pc, lt, timeValid || demo.on); return; }
       const uint16_t cText = colText(), cTemp = Canvas::rgb(g_cfg.display.colors.temp), cDate = colDate();
       char l1[32], l2[32];
       if (id == PAGE_DATE) {
         if (!timeValid) { drawStatusLine(pc); return; }
         snprintf(l1, sizeof(l1), "%s", DAY_NAMES[lt.tm_wday % 7]);
-        snprintf(l2, sizeof(l2), "%s %d", MON_NAMES[lt.tm_mon % 12], lt.tm_mday);
+        if (g_cfg.time.date_order == 1) snprintf(l2, sizeof(l2), "%d %s", lt.tm_mday, MON_NAMES[lt.tm_mon % 12]);
+        else if (g_cfg.time.date_order == 2) snprintf(l2, sizeof(l2), "%02d-%02d", lt.tm_mon + 1, lt.tm_mday);
+        else snprintf(l2, sizeof(l2), "%s %d", MON_NAMES[lt.tm_mon % 12], lt.tm_mday);
         pc.drawTextCentered(l1, W / 2, Y_L1, cDate);
         pc.drawTextCentered(l2, W / 2, Y_L2, cText);
         return;
@@ -491,6 +570,42 @@ namespace renderer {
           snprintf(l2, sizeof(l2), "SET %s", t);
           pc.drawTextCentered(l1, W / 2, Y_L1, Canvas::rgb(0xFFD060));
           pc.drawTextCentered(l2, W / 2, Y_L2, Canvas::rgb(0xFF8060));
+          break;
+        }
+        case PAGE_UV: {
+          if (wx.cur.uv < 0) { pc.drawTextCentered("NO UV DATA", W / 2, Y_SINGLE, C_GREY); break; }
+          // WHO bands: 0-2 low, 3-5 moderate, 6-7 high, 8-10 very high, 11+ extreme
+          const float u = wx.cur.uv;
+          const uint16_t cu = Canvas::rgb(u < 3 ? 0x40C060 : u < 6 ? 0xFFD060 : u < 8 ? 0xFF8020 : u < 11 ? 0xFF4040 : 0xC040FF);
+          snprintf(l1, sizeof(l1), "UV %.0f", u);
+          const char* band = u < 3 ? "LOW" : u < 6 ? "MODERATE" : u < 8 ? "HIGH" : u < 11 ? "V HIGH" : "EXTREME";
+          if (wx.ndaily && wx.daily[0].uv_max >= 0 && u < wx.daily[0].uv_max - 0.5f)
+            snprintf(l2, sizeof(l2), "%s MAX %.0f", band, wx.daily[0].uv_max);
+          else snprintf(l2, sizeof(l2), "%s", band);
+          if (pc.textWidth(l2) > W - 2) snprintf(l2, sizeof(l2), "%s", band);
+          pc.drawTextCentered(l1, W / 2, Y_L1, cu);
+          pc.drawTextCentered(l2, W / 2, Y_L2, cText);
+          break;
+        }
+        case PAGE_SKY: {
+          if (wx.cur.cloud < 0 && wx.cur.vis < 0) { pc.drawTextCentered("NO SKY DATA", W / 2, Y_SINGLE, C_GREY); break; }
+          if (wx.cur.cloud >= 0) snprintf(l1, sizeof(l1), "CLOUD %d%%", (int)lroundf(wx.cur.cloud));
+          else l1[0] = '\0';
+          if (wx.cur.vis >= 0) snprintf(l2, sizeof(l2), "VIS %d %s", (int)lroundf(wx.cur.vis), wx.imperial ? "MI" : "KM");
+          else l2[0] = '\0';
+          if (l1[0]) pc.drawTextCentered(l1, W / 2, Y_L1, cDate);
+          if (l2[0]) pc.drawTextCentered(l2, W / 2, l1[0] ? Y_L2 : Y_SINGLE, cText);
+          break;
+        }
+        case PAGE_RAIN: {
+          if (!wx.ndaily) { pc.drawTextCentered("NO RAIN DATA", W / 2, Y_SINGLE, C_GREY); break; }
+          const float today = wx.daily[0].rain_sum;
+          if (today < 0) snprintf(l1, sizeof(l1), "RAIN --");
+          else if (wx.imperial) snprintf(l1, sizeof(l1), "RAIN %.2f\"", today);
+          else snprintf(l1, sizeof(l1), "RAIN %.1fMM", today);
+          snprintf(l2, sizeof(l2), "CHANCE %d%%", (int)wx.daily[0].pop);
+          pc.drawTextCentered(l1, W / 2, Y_L1, Canvas::rgb(0x60A0FF));
+          pc.drawTextCentered(l2, W / 2, Y_L2, cText);
           break;
         }
         default: break;
@@ -787,6 +902,19 @@ namespace renderer {
       c.drawTextCentered(p, W / 2, 26, 0xFFFF);
     }
 
+    uint32_t sleepAt = 0;          // millis() when the fade starts; 0 = no sleep timer
+    bool sleepArmed = false;
+
+    // Scales whatever the schedule decided. Returns 255 (no change) until the sleep moment, then ramps to 0.
+    uint16_t sleepScale(uint32_t now) {
+      if (!sleepArmed) return 255;
+      const int32_t past = (int32_t)(now - sleepAt);
+      if (past < 0) return 255;
+      const uint32_t fade = (uint32_t)g_cfg.display.sleep_fade_sec * 1000UL;
+      if (!fade || (uint32_t)past >= fade) return 0;
+      return (uint16_t)(255 - (uint32_t)past * 255UL / fade);
+    }
+
     uint8_t decideBrightness(const struct tm& lt, bool timeValid) {
       const DisplayConfig& d = g_cfg.display;
       uint16_t nowMin = (uint16_t)(lt.tm_hour * 60 + lt.tm_min);
@@ -806,6 +934,11 @@ namespace renderer {
       if (adj < 1) adj = 1;
       if (adj > 255) adj = 255;
       level = (uint8_t)adj;
+      const uint16_t sc = sleepScale(millis());
+      if (sc != 255) {
+        adj = (int)level * (int)sc / 255;
+        return (uint8_t)(adj < 0 ? 0 : adj);      // 0 is allowed here: the sleep timer really does go dark
+      }
       return level ? level : 1;
     }
 
@@ -909,6 +1042,21 @@ namespace renderer {
   void cycleNightOverride() { nightOvr = (uint8_t)((nightOvr + 1) % 3); lastBri = 0; }
   uint8_t nightOverride() { return nightOvr; }
   bool nightActive() { return night; }
+  void startSleep(uint32_t minutes) {
+    if (!minutes) { cancelSleep(); return; }
+    sleepAt = millis() + minutes * 60000UL;
+    sleepArmed = true;
+    LOGI("display: sleep in %lu min", (unsigned long)minutes);
+  }
+  void cancelSleep() { if (sleepArmed) LOGI("display: sleep cancelled"); sleepArmed = false; sleepAt = 0; }
+  bool sleepPending() { return sleepArmed; }
+  uint32_t sleepRemainingSec() {
+    if (!sleepArmed) return 0;
+    const int32_t d = (int32_t)(sleepAt - millis());
+    return d > 0 ? (uint32_t)(d + 999) / 1000 : 0;
+  }
+  bool sleepFadedOut() { return sleepArmed && sleepScale(millis()) == 0; }
+
   uint8_t effectiveBrightness() { return lastBri; }
   const char* themeName() { return theme ? theme->name : ""; }
   const char* screenName() {
@@ -1059,6 +1207,7 @@ namespace renderer {
     else if (alert) drawBanner(pc, now);
     else if (msg.active) drawMessage(pc, now);
     else if (timerRun) drawTimer(pc, demo.on && demo.timer ? (uint32_t)max<int32_t>(0, (int32_t)(demo.timerEnd - now)) / 1000 : alarmclock::timerRemainingSec());
+    else if (!demo.on && alarmclock::stopwatchActive()) drawStopwatch(pc);
     else if (!demo.on && ipUntil && (int32_t)(now - ipUntil) < 0 && wifi_mgr::isConnected()) drawIp(pc);
     else if (!timeValid && !demo.on) drawStatusLine(pc);
     else if (night && d.night.hide_bottom) { /* dark */ }

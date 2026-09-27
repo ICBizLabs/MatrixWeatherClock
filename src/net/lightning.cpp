@@ -25,7 +25,7 @@ namespace lightning {
     size_t head = 0, count = 0;
     uint64_t recentTimes[16]; uint8_t recentIdx = 0;
     volatile bool reconfigure = true;
-    volatile bool strikeEvent = false, chimeEvent = false, notifyEvent = false;
+    volatile bool strikeEvent = false, chimeEvent = false, notifyEvent = false, webhookEvent = false;
     uint32_t lastChime = 0;
     bool wasActive = false;
     uint32_t total = 0;
@@ -102,7 +102,7 @@ namespace lightning {
       }
       strikeEvent = true;
       uint32_t now = millis();
-      if (!wasActive || now - lastChime >= CHIME_INTERVAL_MS) { notifyEvent = true; if (cfg.chime) chimeEvent = true; lastChime = now; }
+      if (!wasActive || now - lastChime >= CHIME_INTERVAL_MS) { notifyEvent = true; webhookEvent = true; if (cfg.chime) chimeEvent = true; lastChime = now; }
       wasActive = true;
       LOGI("lightning: strike %.1f km %d deg", km, s.bearing);
     }
@@ -183,6 +183,7 @@ namespace lightning {
   bool consumeStrikeEvent() { bool e = strikeEvent; strikeEvent = false; return e; }
   bool consumeChimeEvent() { bool e = chimeEvent; chimeEvent = false; return e; }
   bool consumeNotifyEvent() { bool e = notifyEvent; notifyEvent = false; return e; }
+  bool consumeWebhookEvent() { bool e = webhookEvent; webhookEvent = false; return e; }
 
   const char* bearingName(int16_t deg) {
     static const char* const N[8] = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };

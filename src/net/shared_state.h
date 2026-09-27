@@ -7,12 +7,18 @@ struct WeatherCurrent {
   int16_t wind_dir = 0;
   uint8_t wmo = 0;
   bool is_day = true;
+  float uv = -1;            // ultraviolet index, -1 = unknown
+  float cloud = -1;         // cloud cover, percent
+  float vis = -1;           // visibility, in the display distance unit (miles when imperial, else km)
+  float rain = -1;          // precipitation so far this hour, display unit (inch / mm)
 };
 struct WeatherDaily {
   char date[11] = "";
   uint8_t wmo = 0;
   float tmax = 0, tmin = 0;
   uint8_t pop = 0;          // precipitation probability, percent
+  float rain_sum = -1;      // total precipitation for the day, display unit; -1 = unknown
+  float uv_max = -1;        // peak ultraviolet index for the day
 };
 constexpr uint8_t HOURLY_COUNT = 12;
 struct WeatherHourly {

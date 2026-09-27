@@ -22,14 +22,14 @@ namespace app {
   namespace {
     SemaphoreHandle_t cfgMtx = nullptr;
     AppConfig staged;
-    uint16_t stagedFlags = 0;
+    uint32_t stagedFlags = 0;
     volatile bool hasStaged = false;
     volatile bool factoryReset = false;
     uint32_t rebootAt = 0;
-    uint16_t rebootFlags = 0;
+    uint32_t rebootFlags = 0;
     uint32_t bootMs = 0;
 
-    void applyChanges(uint16_t fl) {
+    void applyChanges(uint32_t fl) {
       if (fl & CHG_TIME) timesvc::applyTz(g_cfg.time);
       if (fl & CHG_DISPLAY) { panel::setGamma(g_cfg.display.gamma); renderer::applyDisplay(); }
       if (fl & CHG_AUDIO) { audio_out::apply(g_cfg.audio); voice::apply(g_cfg.audio); }
@@ -100,7 +100,7 @@ namespace app {
   void cfgLock() { if (cfgMtx) xSemaphoreTakeRecursive(cfgMtx, pdMS_TO_TICKS(1000)); }
   void cfgUnlock() { if (cfgMtx) xSemaphoreGiveRecursive(cfgMtx); }
 
-  bool stageConfig(const AppConfig& next, uint16_t changed) {
+  bool stageConfig(const AppConfig& next, uint32_t changed) {
     cfgLock();
     staged = next;
     stagedFlags |= changed;
@@ -113,18 +113,18 @@ namespace app {
   void requestFactoryReset() { factoryReset = true; }
   bool rebootPending() { return rebootAt != 0; }
   uint32_t uptimeSec() { return (millis() - bootMs) / 1000; }
-  uint16_t rebootRequiredFlags() { return rebootFlags; }
+  uint32_t rebootRequiredFlags() { return rebootFlags; }
 
   void loop() {
     if (hasStaged) {
       cfgLock();
       AppConfig next = staged;
-      uint16_t fl = stagedFlags;
+      uint32_t fl = stagedFlags;
       hasStaged = false;
       stagedFlags = 0;
       g_cfg = next;
       cfgUnlock();
-      LOGI("config: applying changes 0x%03X", (unsigned)fl);
+      LOGI("config: applying changes 0x%06X", (unsigned)fl);
       applyChanges(fl);
       config_save(g_cfg);
     }

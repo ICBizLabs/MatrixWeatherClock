@@ -21,6 +21,7 @@
 #include "alarm/alarm.h"
 #include "net/lightning.h"
 #include "net/pushbullet.h"
+#include "net/webhook.h"
 #include "net/updater.h"
 #include "net/voice_pack.h"
 #include "net/radar.h"
@@ -94,6 +95,7 @@ void setup() {
   shared::begin();
   alerts::begin();
   pushbullet::begin();
+  webhook::begin();
   updater::begin();
   radar::begin();
   tide::begin();
@@ -187,6 +189,12 @@ void loop() {
           snprintf(body, sizeof(body), "Indoor air quality %d%% (%.0f kOhm, humidity %.0f%%). Time to ventilate.", (int)lroundf(er.air_score), er.gas_kohm, er.humidity);
           pushbullet::notify("Air quality poor", body);
         }
+        if (webhook::wants(webhook::Event::Air, Severity::Unknown)) {
+          env_sensor::Reading er = env_sensor::reading();
+          char body[96];
+          snprintf(body, sizeof(body), "Indoor air quality %d%% (%.0f kOhm, humidity %.0f%%)", (int)lroundf(er.air_score), er.gas_kohm, er.humidity);
+          webhook::notify(webhook::Event::Air, "Air quality poor", body);
+        }
       }
     }
     Severity fired;
@@ -201,9 +209,26 @@ void loop() {
       snprintf(body, sizeof(body), "Strike %.1f km %s of home, %u in the last %u min", ls.latest_km, lightning::bearingName(ls.latest_bearing), ls.count, g_cfg.lightning.window_min);
       pushbullet::notify("Lightning nearby", body);
     }
-    if (g_cfg.pushbullet.notify_alerts && g_cfg.pushbullet.token[0]) {
-      char ev[48], hl[160];
-      if (alerts::takeNewForNotify(g_cfg.alerts, g_cfg.pushbullet.notify_min_severity, ev, sizeof(ev), hl, sizeof(hl))) pushbullet::notify(ev, hl);
+    if (lightning::consumeWebhookEvent() && webhook::wants(webhook::Event::Lightning, Severity::Unknown)) {
+      lightning::Status ls = lightning::status();
+      char body[96];
+      snprintf(body, sizeof(body), "Strike %.1f km %s of home, %u in the last %u min", ls.latest_km, lightning::bearingName(ls.latest_bearing), ls.count, g_cfg.lightning.window_min);
+      webhook::notify(webhook::Event::Lightning, "Lightning nearby", body);
+    }
+    {   // one consume feeds both sinks: take at the lower threshold, then let each decide
+      const bool pbWant = g_cfg.pushbullet.notify_alerts && g_cfg.pushbullet.token[0];
+      const bool whWant = g_cfg.webhook.enabled && g_cfg.webhook.url[0] && g_cfg.webhook.on_alerts;
+      if (pbWant || whWant) {
+        Severity minSev = Severity::Extreme;
+        if (pbWant && (uint8_t)g_cfg.pushbullet.notify_min_severity < (uint8_t)minSev) minSev = g_cfg.pushbullet.notify_min_severity;
+        if (whWant && (uint8_t)g_cfg.webhook.min_severity < (uint8_t)minSev) minSev = g_cfg.webhook.min_severity;
+        char ev[48], hl[160];
+        Severity sev = Severity::Unknown;
+        if (alerts::takeNewForNotify(g_cfg.alerts, minSev, ev, sizeof(ev), hl, sizeof(hl), &sev)) {
+          if (pbWant && (uint8_t)sev >= (uint8_t)g_cfg.pushbullet.notify_min_severity) pushbullet::notify(ev, hl);
+          if (webhook::wants(webhook::Event::Alert, sev)) webhook::notify(webhook::Event::Alert, ev, hl);
+        }
+      }
     }
   }
   if (now - lastFrame >= FRAME_MS) {

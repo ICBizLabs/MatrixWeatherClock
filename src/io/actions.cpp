@@ -7,6 +7,7 @@
 #include "audio/voice.h"
 #include "net/alert_store.h"
 #include "net/net_task.h"
+#include "time/time_service.h"
 #include "util/log.h"
 
 namespace actions {
@@ -19,7 +20,9 @@ namespace actions {
       { "timer_10", "Timer 10 min" }, { "timer_30", "Timer 30 min" }, { "timer_cancel", "Cancel timer" },
       { "bright_up", "Brighter" }, { "bright_down", "Dimmer" }, { "night", "Night mode on / off / auto" },
       { "mute", "Mute / unmute" }, { "demo", "Demo mode on / off" }, { "refresh", "Refresh weather and radar" },
-      { "show_ip", "Show IP address" }, { "chime", "Play the chime" } };
+      { "show_ip", "Show IP address" }, { "chime", "Play the chime" },
+      { "say_time", "Speak the time" }, { "stopwatch", "Stopwatch start / pause" }, { "stopwatch_reset", "Stopwatch reset" },
+      { "sleep_30", "Sleep in 30 min" }, { "sleep_60", "Sleep in 60 min" }, { "sleep_cancel", "Cancel sleep" } };
   }
 
   const char* name(Id id) { return (uint8_t)id < (uint8_t)Id::COUNT ? DEFS[(uint8_t)id].name : "none"; }
@@ -66,6 +69,17 @@ namespace actions {
       case Id::Refresh: net_task::kick(net_task::JOB_WEATHER | net_task::JOB_ALERTS | net_task::JOB_RADAR); break;
       case Id::ShowIp: renderer::showIp(20000); break;
       case Id::Chime: audio_out::chime(g_cfg.audio.chime == ChimeStyle::None ? ChimeStyle::TwoTone : g_cfg.audio.chime, true); break;
+      case Id::SayTime: {
+        struct tm lt;
+        if (!timesvc::localNow(lt)) return false;
+        voice::sayTime(ChimeStyle::None, lt.tm_hour, lt.tm_min, true);
+        break;
+      }
+      case Id::StopwatchToggle: alarmclock::stopwatchToggle(); break;
+      case Id::StopwatchReset: alarmclock::stopwatchReset(); break;
+      case Id::Sleep30: renderer::startSleep(30); break;
+      case Id::Sleep60: renderer::startSleep(60); break;
+      case Id::SleepCancel: renderer::cancelSleep(); break;
       default: return false;
     }
     return true;

@@ -13,7 +13,9 @@ namespace weather_client {
     url += "&longitude=";
     url += String(cfg.location.lon, 4);
     url += "&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m";
+    url += ",uv_index,cloud_cover,visibility,precipitation";
     url += "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset";
+    url += ",precipitation_sum,uv_index_max";
     url += "&hourly=temperature_2m,precipitation_probability&forecast_hours=12";
     if (cfg.weather.imperial) url += "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch";
     else url += "&wind_speed_unit=kmh";
@@ -57,9 +59,17 @@ namespace weather_client {
     w.cur.wind_dir = cur["wind_direction_10m"] | 0;
     w.cur.wmo = cur["weather_code"] | 0;
     w.cur.is_day = (cur["is_day"] | 1) != 0;
+    w.cur.uv = cur["uv_index"] | -1.0f;
+    w.cur.cloud = cur["cloud_cover"] | -1.0f;
+    w.cur.rain = cur["precipitation"] | -1.0f;
+    {   // visibility follows the unit set: feet with precipitation_unit=inch, metres otherwise
+      float v = cur["visibility"] | -1.0f;
+      w.cur.vis = v < 0 ? -1.0f : (cfg.weather.imperial ? v / 5280.0f : v / 1000.0f);
+    }
     if (!daily.isNull()) {
       JsonArray t = daily["time"], wc = daily["weather_code"], tmax = daily["temperature_2m_max"],
-                tmin = daily["temperature_2m_min"], pop = daily["precipitation_probability_max"];
+                tmin = daily["temperature_2m_min"], pop = daily["precipitation_probability_max"],
+                rsum = daily["precipitation_sum"], uvm = daily["uv_index_max"];
       for (size_t i = 0; i < t.size() && i < 3; i++) {
         WeatherDaily& d = w.daily[i];
         strlcpy(d.date, t[i] | "", sizeof(d.date));
@@ -67,6 +77,8 @@ namespace weather_client {
         d.tmax = tmax[i] | 0.0f;
         d.tmin = tmin[i] | 0.0f;
         d.pop = pop[i] | 0;
+        d.rain_sum = rsum[i] | -1.0f;
+        d.uv_max = uvm[i] | -1.0f;
         w.ndaily = i + 1;
       }
       const char* sr = daily["sunrise"][0] | "";

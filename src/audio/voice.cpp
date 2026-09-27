@@ -151,6 +151,7 @@ namespace voice {
       case Kind::Alarm: want = want && cfg.speech.alarms; break;
       case Kind::Demo: want = want && cfg.speech.demo; break;
       case Kind::Indoor: want = want && cfg.speech.indoor; break;
+      case Kind::Time: want = want && cfg.speech.say_time; break;
       default: break;
     }
     audio_out::ClipRef c;
@@ -161,6 +162,52 @@ namespace voice {
     }
     if (want && !have) LOGI("voice: %s (\"%s\")", info().installed ? "phrase not in voice pack" : "no voice pack", phrase);
     bool ok = audio_out::play(style, have ? &c : nullptr, cfg.speech.repeat, force);
+    if (!ok) err = audio_out::lastSuppressReason();
+    return ok;
+  }
+
+  namespace {
+    const char* const NUM_WORDS[20] = { "oh", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+                                        "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+                                        "seventeen", "eighteen", "nineteen" };
+    const char* const TENS_WORDS[6] = { "", "", "twenty", "thirty", "forty", "fifty" };
+  }
+
+  bool canSayTime() {
+    audio_out::ClipRef c;
+    return lookup("it is", c) && lookup("one", c) && lookup("o clock", c);
+  }
+
+  bool sayTime(ChimeStyle style, int hour, int minute, bool force) {
+    if (!cfg.speech.enabled || !cfg.speech.say_time) { err = "spoken time off"; return false; }
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) { err = "bad time"; return false; }
+    const bool h24 = g_cfg.time.use_24h;
+    const char* words[audio_out::MAX_SEQ];
+    uint8_t n = 0;
+    const auto push = [&](const char* w) { if (n < audio_out::MAX_SEQ) words[n++] = w; };
+    push("it is");
+    if (h24) {                                 // "zero zero hundred", "oh nine thirty", "twenty three forty seven"
+      if (hour == 0) { push("zero"); push("zero"); }
+      else if (hour < 10) { push("oh"); push(NUM_WORDS[hour]); }
+      else if (hour < 20) push(NUM_WORDS[hour]);
+      else { push(TENS_WORDS[2]); if (hour % 10) push(NUM_WORDS[hour % 10]); }
+    } else {
+      const int h12 = (hour % 12) == 0 ? 12 : hour % 12;
+      push(NUM_WORDS[h12]);
+    }
+    if (minute == 0) push(h24 ? "hundred" : "o clock");
+    else if (minute < 10) { push("oh"); push(NUM_WORDS[minute]); }
+    else if (minute < 20) push(NUM_WORDS[minute]);
+    else { push(TENS_WORDS[minute / 10]); if (minute % 10) push(NUM_WORDS[minute % 10]); }
+    if (!h24) push(hour < 12 ? "a m" : "p m");
+
+    audio_out::ClipRef clips[audio_out::MAX_SEQ];
+    uint8_t got = 0;
+    for (uint8_t i = 0; i < n; i++) {
+      if (lookup(words[i], clips[got])) got++;
+      else { LOGI("voice: no clip for \"%s\", cannot speak the time", words[i]); err = "voice pack has no number clips"; return false; }
+    }
+    bool ok = audio_out::playSeq(style, clips, got, force);
     if (!ok) err = audio_out::lastSuppressReason();
     return ok;
   }
