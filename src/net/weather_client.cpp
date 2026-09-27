@@ -5,6 +5,42 @@
 #include "version.h"
 
 namespace weather_client {
+  namespace {
+    // Reported sea-level pressure from the last few fetches, so the barometer page has a real three-hour tendency
+    // even with no sensor attached. One slot per fetch (15 min by default), so 24 slots is about six hours.
+    constexpr uint8_t PLOG = 24;
+    struct PSample { uint32_t ms; float hpa; };
+    PSample plog[PLOG];
+    uint8_t plogN = 0, plogHead = 0;
+
+    void pressurePush(float hpa, uint32_t now) {
+      if (hpa <= 0) return;
+      plog[plogHead] = { now, hpa };
+      plogHead = (uint8_t)((plogHead + 1) % PLOG);
+      if (plogN < PLOG) plogN++;
+    }
+
+    // Change scaled to a full three hours, using the oldest sample within the last three and a half hours.
+    // span_min reports how much history actually backs it, so the page can say "learning" until it is useful.
+    float pressureTendency(uint32_t now, uint16_t& span_min) {
+      span_min = 0;
+      if (plogN < 2) return 0;
+      const uint32_t WINDOW = 3UL * 3600UL * 1000UL;
+      float oldest = 0;
+      uint32_t oldestAge = 0;
+      for (uint8_t i = 0; i < plogN; i++) {
+        const PSample& p = plog[(plogHead + PLOG - 1 - i) % PLOG];
+        const uint32_t age = now - p.ms;
+        if (age > WINDOW + 30UL * 60000UL) break;
+        if (age > oldestAge) { oldestAge = age; oldest = p.hpa; }
+      }
+      if (oldestAge < 20UL * 60000UL || oldest <= 0) return 0;   // under 20 minutes of history says nothing
+      const PSample& newest = plog[(plogHead + PLOG - 1) % PLOG];
+      span_min = (uint16_t)(oldestAge / 60000UL);
+      return (newest.hpa - oldest) * (float)WINDOW / (float)oldestAge;
+    }
+  }
+
   String buildUrl(const AppConfig& cfg) {
     String url;
     url.reserve(400);
@@ -13,7 +49,7 @@ namespace weather_client {
     url += "&longitude=";
     url += String(cfg.location.lon, 4);
     url += "&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m";
-    url += ",uv_index,cloud_cover,visibility,precipitation";
+    url += ",uv_index,cloud_cover,visibility,precipitation,pressure_msl";
     url += "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset";
     url += ",precipitation_sum,uv_index_max";
     url += "&hourly=temperature_2m,precipitation_probability&forecast_hours=12";
@@ -62,6 +98,9 @@ namespace weather_client {
     w.cur.uv = cur["uv_index"] | -1.0f;
     w.cur.cloud = cur["cloud_cover"] | -1.0f;
     w.cur.rain = cur["precipitation"] | -1.0f;
+    w.cur.pressure = cur["pressure_msl"] | -1.0f;
+    pressurePush(w.cur.pressure, w.fetched_ms);
+    w.cur.d_press_3h = pressureTendency(w.fetched_ms, w.cur.press_span_min);
     {   // visibility follows the unit set: feet with precipitation_unit=inch, metres otherwise
       float v = cur["visibility"] | -1.0f;
       w.cur.vis = v < 0 ? -1.0f : (cfg.weather.imperial ? v / 5280.0f : v / 1000.0f);

@@ -23,6 +23,18 @@ main{padding:16px;max-width:900px;margin:0 auto}section{display:none}section.on{
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
 .card h2{font-size:14px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 16px}
+.pagelist{display:flex;flex-direction:column;gap:4px;margin:2px 0 10px}
+.pagerow{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:#161b21}
+.pagerow.on{border-color:var(--acc);background:#18222b}
+.pagerow.drag{opacity:.4}
+.pagerow.over{border-color:var(--acc);border-style:dashed}
+.pagerow .grip{cursor:grab;color:var(--mut);font-size:15px;line-height:1;user-select:none;letter-spacing:-2px}
+.pagerow .nm{flex:1;font-size:14px;color:var(--fg)}
+.pagerow.off .nm{color:var(--mut)}
+.pagerow .pos{font-size:12px;color:var(--mut);min-width:22px;text-align:right;font-variant-numeric:tabular-nums}
+.pagerow .mv{background:none;border:1px solid var(--line);color:var(--mut);border-radius:5px;cursor:pointer;padding:1px 7px;font-size:12px;line-height:1.5}
+.pagerow .mv:hover{color:var(--fg);border-color:var(--acc)}
+.pagerow .mv:disabled{opacity:.3;cursor:default}
 label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)}
 input,select{background:#0d1014;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit}
 input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc)}label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
@@ -180,7 +192,6 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
  </div></div>
  <div class="card"><h2>Pages</h2><div class="grid">
-  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor, air, baro, tide, moon, uv, sky, rain, water, world, event)<input data-k="display.pages" data-list="1"></label>
   <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
   <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
   <label>Forecast every N page cycles<input data-k="display.forecast_every_n_cycles" type="number" min="1" max="20"></label>
@@ -193,7 +204,10 @@ progress{width:100%;height:10px}
   <label>Show IP address after connecting (seconds, 0 = off)<input data-k="display.ip_on_connect_sec" type="number" min="0" max="120"></label>
   <label>Sleep-timer fade (seconds)<input data-k="display.sleep_fade_sec" type="number" min="0" max="120"></label>
  </div>
- <p class="msg">New pages: <b>uv</b> ultraviolet index, <b>sky</b> cloud cover and visibility, <b>rain</b> rainfall today and the chance, <b>water</b> sea temperature at your tide station, <b>world</b> the second time zone, <b>event</b> a countdown to your next date. Each one hides itself when it has no data.</p></div>
+ <h2 style="font-size:14px;margin:14px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em">Pages in the rotation</h2>
+ <div class="pagelist" id="pagelist"></div>
+ <input type="hidden" data-k="display.pages" data-list="1" id="pageshidden">
+ <p class="msg">Tick a page to put it in the rotation, then drag it by the handle, or use the arrows, to set the order. A ticked page still hides itself when it has nothing to show, so the sea-temperature page stays out of the way if your tide station has no thermometer.</p></div>
  <div class="card"><h2>Sleep timer</h2><div class="row"><input id="sleepmin" type="number" min="1" max="720" value="30" style="width:90px"> minutes
   <button class="btn" onclick="post('/api/sleep',{minutes:Number($('#sleepmin').value)})">Sleep</button><button class="btn sec" onclick="post('/api/sleep',{minutes:0})">Cancel</button>
   <span class="msg" id="msg-sleep"></span></div>
@@ -449,7 +463,7 @@ async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json(
  const t2=$('#tz2sel');if(t2){t2.innerHTML='';const none=document.createElement('option');none.value='';none.textContent='(off)';t2.appendChild(none);
   (cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;t2.appendChild(o);});
   t2.onchange=()=>{const op=t2.selectedOptions[0];const f=$('[data-k="time.tz2_posix"]');if(f)f.value=op&&op.dataset.posix?op.dataset.posix:'';};}
- buildHolidays();buildEvents();fillHolidays();fillEvents();
+ buildHolidays();buildEvents();fillHolidays();fillEvents();buildPages();
  const custom=document.createElement('option');custom.value=cfg.time.tz_id;custom.textContent='Custom';if(!(cfg.tz_options||[]).some(z=>z.id===cfg.time.tz_id))t.appendChild(custom);
  fill();if(cfg.alarms)fillAlarms();t.onchange=()=>{const o=t.selectedOptions[0];if(o&&o.dataset.posix)$('[data-k="time.tz_posix"]').value=o.dataset.posix;};}
 async function setDemo(on){const j=await post('/api/demo',null,'on='+(on?1:0)+'&minutes='+(Number($('#demomin').value)||10)+'&sound='+($('#demosound').checked?1:0));if(!j||!j.ok)$('#demo').checked=!on;}
@@ -463,6 +477,71 @@ async function saveAlarms(){const alarms=[];for(let i=0;i<4;i++){let days='';for
  say('alarms','saving…');const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alarms})});const j=await r.json();say('alarms',j.ok?'saved':(j.error||'failed'),j.ok?'ok':'bad');}
 async function restoreCfg(){const f=$('#cfgfile').files[0];if(!f)return say('backup','choose a backup file','bad');try{const j=JSON.parse(await f.text());delete j.tz_options;
  const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(j)});const k=await r.json();say('backup',k.ok?'restored'+(k.reboot_required&&k.reboot_required.length?', reboot required':''):(k.error||'failed'),k.ok?'ok':'bad');loadConfig();}catch(e){say('backup','invalid file: '+e,'bad');}}
+// ---- page picker: tick to include, drag or use the arrows to order ----
+// Rows are the single source of truth; the hidden display.pages field is rewritten from them so the ordinary
+// collect()/save() path needs no special case.
+function buildPages(){
+ const box=$('#pagelist'); if(!box||!cfg) return;
+ const avail=cfg.pages_available||[];
+ if(!avail.length) return;
+ const chosen=(cfg.display&&cfg.display.pages)||[];
+ const label={}; avail.forEach(p=>label[p.id]=p.label);
+ const order=chosen.filter(id=>label[id]).concat(avail.map(p=>p.id).filter(id=>!chosen.includes(id)));
+ box.innerHTML='';
+ order.forEach(id=>{
+  const on=chosen.includes(id);
+  const row=document.createElement('div');
+  row.className='pagerow '+(on?'on':'off');
+  row.draggable=true;
+  row.dataset.id=id;
+  row.innerHTML='<span class="pos"></span>'+
+   '<span class="grip" title="Drag to reorder">&#9776;</span>'+
+   '<input type="checkbox" class="pg-on"'+(on?' checked':'')+' aria-label="Show '+label[id]+'">'+
+   '<span class="nm">'+label[id]+'</span>'+
+   '<button type="button" class="mv up" title="Move up">&#9650;</button>'+
+   '<button type="button" class="mv dn" title="Move down">&#9660;</button>';
+  box.appendChild(row);
+ });
+ box.querySelectorAll('.pg-on').forEach(c=>c.onchange=e=>{
+  const row=e.target.closest('.pagerow');
+  row.classList.toggle('on',e.target.checked); row.classList.toggle('off',!e.target.checked);
+  syncPages();   // the row stays where it is: rows below the ticked block are last in rotation anyway,
+                 // and a row deliberately dragged to the top should stay at the top when it is ticked
+ });
+ box.querySelectorAll('.mv').forEach(b=>b.onclick=e=>{
+  const row=e.target.closest('.pagerow');
+  if(e.target.classList.contains('up')){ if(row.previousElementSibling) row.parentNode.insertBefore(row,row.previousElementSibling); }
+  else { if(row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling,row); }
+  syncPages();
+ });
+ let dragged=null;
+ box.querySelectorAll('.pagerow').forEach(row=>{
+  row.addEventListener('dragstart',e=>{dragged=row;row.classList.add('drag');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',row.dataset.id);});
+  row.addEventListener('dragend',()=>{dragged&&dragged.classList.remove('drag');dragged=null;box.querySelectorAll('.pagerow').forEach(r=>r.classList.remove('over'));syncPages();});
+  row.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';if(dragged&&dragged!==row)row.classList.add('over');});
+  row.addEventListener('dragleave',()=>row.classList.remove('over'));
+  row.addEventListener('drop',e=>{
+   e.preventDefault(); row.classList.remove('over');
+   if(!dragged||dragged===row) return;
+   const rows=[...box.querySelectorAll('.pagerow')];
+   box.insertBefore(dragged, rows.indexOf(dragged)<rows.indexOf(row) ? row.nextSibling : row);
+   syncPages();
+  });
+ });
+ syncPages();
+}
+function syncPages(){
+ const box=$('#pagelist'); if(!box) return;
+ const on=[];
+ [...box.querySelectorAll('.pagerow')].forEach(r=>{
+  const checked=r.querySelector('.pg-on').checked;
+  r.querySelector('.pos').textContent = checked ? String(on.length+1) : '';
+  if(checked) on.push(r.dataset.id);
+ });
+ const h=$('#pageshidden'); if(h) h.value=on.join(', ');
+ [...box.querySelectorAll('.mv.up')].forEach((b,i)=>b.disabled=(i===0));
+ const dn=[...box.querySelectorAll('.mv.dn')]; dn.forEach((b,i)=>b.disabled=(i===dn.length-1));
+}
 function buildHolidays(){const g=$('#holgrid');if(!g||g.dataset.built)return;g.dataset.built='1';
  for(let i=0;i<4;i++){const d=document.createElement('div');d.className='row';d.style.gap='8px';
   d.innerHTML='<input class="hol-m" data-i="'+i+'" type="number" min="0" max="12" placeholder="MM" style="width:70px">'+

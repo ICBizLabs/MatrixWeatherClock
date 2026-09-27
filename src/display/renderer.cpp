@@ -286,14 +286,17 @@ namespace renderer {
         x += pc.textWidth(b);
         drawTrend(pc, x, Y_L1 + 1, r.t_hum);
       } else pc.drawText("IN", x, Y_L1, cText);
-      const float hpa = (g_cfg.indoor.sea_level && r.sea_level_known) ? r.sea_level_hpa : r.pressure_hpa;
-      const bool inhg = g_cfg.indoor.pressure_unit == 2 || (g_cfg.indoor.pressure_unit == 0 && imperial);
-      if (inhg) snprintf(b, sizeof(b), "%.2fIN", hpa * 0.02953f);
-      else snprintf(b, sizeof(b), "%dHPA", (int)lroundf(hpa));
-      x = TEXT_X;
-      pc.drawText(b, x, Y_L2, cText);
-      x += pc.textWidth(b);
-      drawTrend(pc, x, Y_L2 + 1, r.t_press);
+      // Second line: dew point, or the condensation / mould warning when there is one to give.
+      if (r.has_humidity) {
+        if (r.mould_risk) {
+          pc.drawText(r.mould_risk >= 2 ? "MOULD RISK" : "DAMP AIR", TEXT_X, Y_L2, Canvas::rgb(r.mould_risk >= 2 ? 0xFF6060 : 0xFFC040));
+        } else if (r.condensation) {
+          pc.drawText(r.condensation >= 2 ? "CONDENSING" : "MAY CONDENSE", TEXT_X, Y_L2, Canvas::rgb(0x60C0FF));
+        } else {
+          snprintf(b, sizeof(b), "DEW %d\xF8", (int)lroundf(imperial ? r.dew_point_c * 9.0f / 5.0f + 32.0f : r.dew_point_c));
+          pc.drawText(b, TEXT_X, Y_L2, cText);
+        }
+      }
     }
     constexpr uint16_t C_AIR_GOOD = 0x3FE6, C_AIR_FAIR = 0xFFC0, C_AIR_POOR = 0xF9C0;
     void drawAirPage(Canvas& pc, const env_sensor::Reading& r) {
@@ -310,21 +313,57 @@ namespace renderer {
       const char* word = r.air_level == env_sensor::AIR_GOOD ? "GOOD" : r.air_level == env_sensor::AIR_FAIR ? "FAIR" : "POOR";
       pc.drawTextCentered(word, W / 2, Y_L2, col);
     }
+    // The sensor wins when there is one: it measures the air you are actually in, and it gives a real tendency.
+    // Without a sensor the page falls back to the sea-level pressure the weather service reports, whose tendency
+    // comes from a ring of past fetches kept in weather_client.
+    bool baroSource(const env_sensor::Reading& r, float& hpa, float& d3h, uint16_t& span, bool& fromSensor) {
+      if (r.valid && r.pressure_hpa > 0) {
+        hpa = (g_cfg.indoor.sea_level && r.sea_level_known) ? r.sea_level_hpa : r.pressure_hpa;
+        d3h = r.d_press;
+        span = r.span_min;
+        fromSensor = true;
+        return true;
+      }
+      if (wx.valid && wx.cur.pressure > 0) {
+        hpa = wx.cur.pressure;
+        d3h = wx.cur.d_press_3h;
+        span = wx.cur.press_span_min;
+        fromSensor = false;
+        return true;
+      }
+      return false;
+    }
+    env_sensor::Trend pressTrend(float d3h) {
+      if (d3h >= 3.0f) return env_sensor::Trend::RisingFast;
+      if (d3h >= 1.0f) return env_sensor::Trend::Rising;
+      if (d3h <= -3.0f) return env_sensor::Trend::FallingFast;
+      if (d3h <= -1.0f) return env_sensor::Trend::Falling;
+      return env_sensor::Trend::Steady;
+    }
     void drawBaroPage(Canvas& pc, const env_sensor::Reading& r, uint32_t now) {
       classicFont(pc);
-      if (!r.valid) { pc.drawTextCentered(env_sensor::present() ? "READING.." : "NO SENSOR", W / 2, Y_SINGLE, C_GREY); return; }
+      float hpa = 0, d3h = 0;
+      uint16_t span = 0;
+      bool fromSensor = false;
+      if (!baroSource(r, hpa, d3h, span, fromSensor)) {
+        pc.drawTextCentered(env_sensor::present() ? "READING.." : "NO PRESSURE", W / 2, Y_SINGLE, C_GREY);
+        return;
+      }
       const bool imperial = g_cfg.weather.imperial;
-      const float hpa = (g_cfg.indoor.sea_level && r.sea_level_known) ? r.sea_level_hpa : r.pressure_hpa;
       const bool inhg = g_cfg.indoor.pressure_unit == 2 || (g_cfg.indoor.pressure_unit == 0 && imperial);
       char b[16];
       if (inhg) snprintf(b, sizeof(b), "%.2f IN", hpa * 0.02953f); else snprintf(b, sizeof(b), "%d HPA", (int)lroundf(hpa));
       int16_t tw = pc.textWidth(b);
       int16_t x = (int16_t)((W - tw - 5) / 2);
       pc.drawText(b, x, Y_L1, colText());
-      drawTrend(pc, x + tw + 2, Y_L1 + 1, r.t_press);
+      drawTrend(pc, x + tw + 2, Y_L1 + 1, fromSensor ? r.t_press : pressTrend(d3h));
+      // a small mark in the corner says where the number came from
+      tinyFont(pc);
+      pc.drawText(fromSensor ? "S" : "W", 1, Y_L1 + 2, C_GREY);
+      classicFont(pc);
       const char* txt;
-      if (r.span_min < 30) txt = "LEARNING TREND";
-      else txt = zambretti::forecast(r.sea_level_known ? r.sea_level_hpa : r.pressure_hpa, r.d_press, wx.valid ? wx.cur.wind_dir : -1).text;
+      if (span < 30) txt = "LEARNING TREND";
+      else txt = zambretti::forecast(hpa, d3h, wx.valid ? wx.cur.wind_dir : -1).text;
       String up = txt; up.toUpperCase();
       baroScroll.setText(up.c_str(), 15, now);
       baroScroll.draw(pc, 0, Y_L2, W, colDate(), now, true);
@@ -487,7 +526,8 @@ namespace renderer {
     bool pageAvailable(uint8_t id) {
       if (demo.on) return true;
       switch (id) {
-        case PAGE_INDOOR: case PAGE_BARO: return env_sensor::present();
+        case PAGE_INDOOR: return env_sensor::present();
+        case PAGE_BARO: return env_sensor::present() || (wx.valid && wx.cur.pressure > 0);
         case PAGE_AIR: return env_sensor::hasGas();
         case PAGE_TIDE: { tide::Data td; return g_cfg.tide.enabled && tide::get(td); }
         case PAGE_WATER: { tide::Data td; return g_cfg.tide.enabled && g_cfg.tide.water_temp && tide::get(td) && td.water_temp > -999; }

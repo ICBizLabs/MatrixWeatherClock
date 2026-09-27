@@ -11,6 +11,9 @@ struct WeatherCurrent {
   float cloud = -1;         // cloud cover, percent
   float vis = -1;           // visibility, in the display distance unit (miles when imperial, else km)
   float rain = -1;          // precipitation so far this hour, display unit (inch / mm)
+  float pressure = -1;      // sea-level pressure reported by the weather service, hPa; -1 = unknown
+  float d_press_3h = 0;     // change over the last three hours, hPa (0 when the span below is 0)
+  uint16_t press_span_min = 0;   // minutes of reported-pressure history behind d_press_3h; 0 = not enough yet
 };
 struct WeatherDaily {
   char date[11] = "";

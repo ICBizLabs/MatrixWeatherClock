@@ -31,8 +31,8 @@ arrives, and is configured entirely through its own web interface.
   on request or on the hour, strung together from number clips.
 - **Hourly chime**, optionally striking the hour one to twelve times, with a half-hour chime and a spoken time if you
   want them. Quiet hours silence it, so it will not wake you.
-- **Display control**: manual brightness, day/night schedule, night mode (very dim, clock only), gamma, colours,
-  page order and timing.
+- **Display control**: manual brightness, day/night schedule, night mode (very dim, clock only), gamma, colours
+  and timing. Pages are picked from a tick list and dragged into the order you want.
 - **Web UI** with setup access point and captive portal, mDNS (`matrixweatherclock.local`), REST API, WiFi scanner,
   test buttons (panel pattern, fake alert, chime), log viewer and over-the-air firmware update. **Two WiFi networks**
   can be saved, and the address can be static instead of DHCP.
@@ -63,7 +63,8 @@ arrives, and is configured entirely through its own web interface.
   on the panel with a blinking home marker. It takes turns with the forecast screens and comes back every couple of
   page cycles while rain or snow is nearby.
 - **Indoor sensor**: plug a BME280, BMP280 or BME680 into the I2C header and the clock shows indoor temperature,
-  humidity and barometric pressure with rising / falling arrows, keeps 24 hours of history and charts it in the web UI.
+  humidity and dew point with rising / falling arrows, keeps 24 hours of history and charts it in the web UI.
+  Barometric pressure has its own page, which uses the sensor when there is one and the weather service otherwise.
   A BME680 adds a relative **air-quality** score with a "ventilate" alert; every sensor adds dew point, condensation
   and mould risk, and a **Zambretti barometer forecast** page.
 - **Live view** of the panel in the web UI, settings backup and restore.

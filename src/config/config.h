@@ -10,6 +10,7 @@ bool        severity_parse(const char* s, Severity& out);
 enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_TIDE, PAGE_MOON,
                           PAGE_UV, PAGE_SKY, PAGE_RAIN, PAGE_WATER, PAGE_WORLD, PAGE_EVENT, PAGE_COUNT };
 const char* page_name(uint8_t id);
+const char* page_label(uint8_t id);      // human name for the web UI's page picker
 bool        page_parse(const char* s, uint8_t& out);
 
 enum class ChimeStyle : uint8_t {

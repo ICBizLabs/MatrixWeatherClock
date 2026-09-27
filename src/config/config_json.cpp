@@ -8,6 +8,12 @@ namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
   const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro", "tide", "moon",
                                      "uv", "sky", "rain", "water", "world", "event" };
+  // Shown in the web UI's page picker; index-aligned with PAGE_NAMES and PageId.
+  const char* const PAGE_LABELS[] = { "Date", "Temperature", "Conditions", "Wind", "High / low", "Feels like",
+                                      "Sunrise / sunset", "Indoor temperature and humidity", "Air quality",
+                                      "Barometer", "Tide", "Moon phase", "Ultraviolet index",
+                                      "Cloud and visibility", "Rainfall", "Sea temperature", "World clock",
+                                      "Countdown" };
   const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
                                       "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
   constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
@@ -122,6 +128,7 @@ namespace {
 const char* severity_name(Severity s) { uint8_t i = (uint8_t)s; return i < 5 ? SEVERITY_NAMES[i] : "Unknown"; }
 bool severity_parse(const char* s, Severity& out) { uint8_t i; if (!nameLookup(SEVERITY_NAMES, 5, s, i)) return false; out = (Severity)i; return true; }
 const char* page_name(uint8_t id) { return id < PAGE_COUNT ? PAGE_NAMES[id] : "?"; }
+const char* page_label(uint8_t id) { return id < PAGE_COUNT ? PAGE_LABELS[id] : "?"; }
 bool page_parse(const char* s, uint8_t& out) { return nameLookup(PAGE_NAMES, PAGE_COUNT, s, out); }
 const char* chime_name(ChimeStyle c) { uint8_t i = (uint8_t)c; return i < CHIME_COUNT ? CHIME_NAMES[i] : "none"; }
 bool chime_parse(const char* s, ChimeStyle& out) { uint8_t i; if (!nameLookup(CHIME_NAMES, CHIME_COUNT, s, i)) return false; out = (ChimeStyle)i; return true; }

@@ -53,6 +53,11 @@ namespace web {
       if (w.cur.cloud >= 0) c["cloud"] = (int)lroundf(w.cur.cloud);
       if (w.cur.vis >= 0) c["visibility"] = serialized(String(w.cur.vis, 1));
       if (w.cur.rain >= 0) c["precip"] = serialized(String(w.cur.rain, 2));
+      if (w.cur.pressure > 0) {
+        c["pressure"] = serialized(String(w.cur.pressure, 1));
+        c["d_press_3h"] = serialized(String(w.cur.d_press_3h, 1));
+        c["press_span_min"] = w.cur.press_span_min;
+      }
       JsonArray d = o["daily"].to<JsonArray>();
       for (uint8_t i = 0; i < w.ndaily; i++) {
         JsonObject x = d.add<JsonObject>();
@@ -337,6 +342,12 @@ namespace web {
         res->setLength();
         r->send(res);
         return;
+      }
+      JsonArray pl = root["pages_available"].to<JsonArray>();
+      for (uint8_t i = 0; i < PAGE_COUNT; i++) {
+        JsonObject o = pl.add<JsonObject>();
+        o["id"] = page_name(i);
+        o["label"] = page_label(i);
       }
       JsonArray tz = root["tz_options"].to<JsonArray>();
       for (size_t i = 0; i < TZ_TABLE_LEN; i++) {

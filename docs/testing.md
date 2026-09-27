@@ -125,3 +125,19 @@ pio device monitor           # serial log at 115200
      and `hourly_speak` therefore remain unverified. Before retrying, note the pack grew from 3.98 to 4.4 MB, so
      old plus new now occupy 8.4 MB of the 9.9 MB filesystem during the swap; that is within the free-space check
      but tighter than before. Retry with nothing else polling the device, and watch the serial console.
+
+9. **0.15.0 additions** – verified on the device at 192.168.4.56 on 2026-09-27.
+   **Page picker** – the Display tab lists all eighteen pages with a tick box, a drag handle and up/down arrows;
+   `GET /api/config.pages_available` feeds it so it can never drift from the `PageId` enum. Checked in a browser:
+   eighteen rows render, ticking a page adds it in the position it sits in, the arrows and drag both reorder,
+   position numbers renumber over the ticked rows only, the first up and last down arrows disable, and Save posts
+   the list in the displayed order. A page ticked while it sits below the ticked block lands last, and one dragged
+   to the top before ticking stays first.
+   **Pressure** – no longer on the indoor page, which now shows temperature, humidity and dew point (81 F at 43 %
+   gave a dew point of 57 F, correct). The barometer page prefers the sensor: with the BME688 connected it read
+   29.93 inHg with an `s` marker, matching the sensor's 1013.5 hPa sea-level figure. With `indoor.enabled` turned
+   off it fell back to 29.90 inHg with a `w` marker, matching the 1012.6 hPa Open-Meteo reports. Both sources agree
+   to about a tenth of a hPa, which is the cross-check worth repeating after any change here.
+   The reported tendency needs history: `press_span_min` is 0 until about 20 minutes of fetches have accumulated,
+   and the page says LEARNING TREND until 30 minutes, so the Zambretti text on a sensorless clock appears only
+   after roughly half an hour. Worth re-checking a few hours after a reboot that `d_press_3h` becomes non-zero.
