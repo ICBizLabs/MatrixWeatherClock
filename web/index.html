@@ -197,7 +197,6 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="display.transitions" type="checkbox">Slide transitions between pages</label>
   <label class="chk"><input data-k="display.precip_fx" type="checkbox">Rain / snow / lightning animation behind the weather</label>
   <label class="chk"><input data-k="display.moon_page" type="checkbox">Moon phase page</label>
-  <label class="chk"><input data-k="display.holiday_themes" type="checkbox">Holiday colours and effects</label>
   <label>Show IP address after connecting (seconds, 0 = off)<input data-k="display.ip_on_connect_sec" type="number" min="0" max="120"></label>
   <label>Sleep-timer fade (seconds)<input data-k="display.sleep_fade_sec" type="number" min="0" max="120"></label>
  </div>
@@ -212,7 +211,19 @@ progress{width:100%;height:10px}
  <div class="card"><h2>Your own dates</h2><div class="grid" id="holgrid"></div>
   <div class="row"><button class="btn" onclick="saveHolidays()">Save dates</button><span class="msg" id="msg-hol"></span></div>
   <p class="msg">Up to four dates of your own, on top of the nine built-in holidays. On that day the clock and date take the colour you pick. Yours win if a built-in holiday falls on the same date.</p></div>
- <div class="card"><h2>Colours</h2><div class="grid">
+ <div class="card"><h2>Holiday themes</h2><div class="grid">
+  <label class="chk"><input data-k="display.holiday_themes" type="checkbox">Use holiday colours and effects on the day</label>
+  <label>Show one now, whatever the date<select data-k="display.force_theme" id="forcesel"></select></label>
+ </div>
+ <div class="grid" id="holthemes" style="margin-top:8px"></div>
+ <input type="hidden" data-k="display.holidays_enabled" data-num="1" id="holidaysbits">
+ <div class="row"><button class="btn" onclick="save('display')">Save</button><span class="msg" id="msg-themes"></span></div>
+ <p class="msg">Untick a holiday to skip it; your own dates above are not affected. "Show one now" pins a theme until you set it back to Automatic, which also works for a holiday you have unticked. The decoration (snow, confetti, hearts) still gives way to real rain or snow, to night mode, and to an alarm or alert.</p></div>
+ <div class="card"><h2>Colours</h2>
+  <div class="row"><label>Start from a theme<select id="presetsel" onchange="applyPreset(this)"></select></label><span class="msg" id="msg-preset"></span></div>
+  <p class="msg">Picking one writes its six colours below, which you can then change however you like. It is applied straight away and not remembered, so the pickers are always what the clock is using.</p>
+  <p class="msg warn" id="pinnote" hidden></p>
+  <div class="grid">
   <label>Time<input data-k="display.colors.time" type="color"></label><label>Date<input data-k="display.colors.date" type="color"></label>
   <label>Temperature<input data-k="display.colors.temp" type="color"></label><label>Text<input data-k="display.colors.text" type="color"></label>
   <label>High<input data-k="display.colors.hi" type="color"></label><label>Low<input data-k="display.colors.lo" type="color"></label>
@@ -474,7 +485,7 @@ async function loadZones(){if(tzAll.length)return tzAll;try{const r=await fetch(
 function zoneOptions(sel,blank){sel.innerHTML='';if(blank){const n=document.createElement('option');n.value='';n.textContent='(off)';sel.appendChild(n);}
  tzAll.forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;o.dataset.label=z.label;sel.appendChild(o);});}
 async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json();remoteRows();await loadZones();const t=$('#tzsel');zoneOptions(t,false);
- buildHolidays();buildEvents();fillHolidays();fillEvents();buildPages();buildWorld();fillWorld();
+ buildHolidays();buildEvents();fillHolidays();fillEvents();buildPages();buildWorld();fillWorld();buildThemes();fillThemes();
  const custom=document.createElement('option');custom.value=cfg.time.tz_id;custom.textContent='Custom';if(!tzAll.some(z=>z.id===cfg.time.tz_id))t.appendChild(custom);
  fill();if(cfg.alarms)fillAlarms();t.onchange=()=>{const o=t.selectedOptions[0];if(o&&o.dataset.posix)$('[data-k="time.tz_posix"]').value=o.dataset.posix;};}
 async function setDemo(on){const j=await post('/api/demo',null,'on='+(on?1:0)+'&minutes='+(Number($('#demomin').value)||10)+'&sound='+($('#demosound').checked?1:0));if(!j||!j.ok)$('#demo').checked=!on;}
@@ -584,6 +595,39 @@ async function saveEvents(){const events=[];for(let i=0;i<3;i++){const v=$('.ev-
   year:p?Number(p[0]):0,month:p?Number(p[1]):0,day:p?Number(p[2]):0});}
  say('events','saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events})});const j=await r.json();
  say('events',(!r.ok||!j.ok)?(j.error||('HTTP '+r.status)):'saved',(!r.ok||!j.ok)?'bad':'ok');}catch(e){say('events',String(e),'bad');}}
+// ---- colour themes: a palette picker, per-holiday switches and a pinned theme ----
+// The lists come from cfg.themes_available so they cannot drift from the firmware's tables.
+function themeList(holiday){return (cfg.themes_available||[]).filter(t=>!!t.holiday===holiday);}
+function buildThemes(){
+ const ps=$('#presetsel');
+ if(ps&&!ps.dataset.built){ps.dataset.built='1';ps.innerHTML='';
+  const o0=document.createElement('option');o0.value='';o0.textContent='Pick a theme...';ps.appendChild(o0);
+  themeList(false).forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.name;ps.appendChild(o);});}
+ const fs=$('#forcesel');
+ if(fs&&!fs.dataset.built){fs.dataset.built='1';fs.innerHTML='';
+  const o0=document.createElement('option');o0.value='';o0.textContent='Automatic (by the date)';fs.appendChild(o0);
+  themeList(true).forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.name;fs.appendChild(o);});}
+ const g=$('#holthemes');
+ if(g&&!g.dataset.built){g.dataset.built='1';g.innerHTML='';
+  themeList(true).forEach(t=>{const l=document.createElement('label');l.className='chk';
+   l.innerHTML='<input class="hol-en" data-bit="'+t.bit+'" type="checkbox">'+t.name;
+   l.querySelector('input').onchange=syncHolidayBits;g.appendChild(l);});}
+}
+function fillThemes(){const m=Number((cfg.display&&cfg.display.holidays_enabled)??0xFFFFFFFF);
+ $$('.hol-en').forEach(el=>{el.checked=((m>>>Number(el.dataset.bit))&1)===1;});syncHolidayBits();
+ const f=(cfg.display&&cfg.display.force_theme)||'',n=$('#pinnote');
+ if(n){const t=(cfg.themes_available||[]).find(x=>x.id===f);
+  n.hidden=!f;n.textContent=f?('The "'+(t?t.name:f)+'" theme is pinned under Holiday themes, so it is painting the panel instead of these colours. Set "Show one now" back to Automatic to use them.'):'';}}
+// Mirrors the page picker: the ticks are the UI, a hidden data-k field is what actually gets posted.
+function syncHolidayBits(){let m=0;$$('.hol-en').forEach(el=>{if(el.checked)m|=(1<<Number(el.dataset.bit));});
+ const h=$('#holidaysbits');if(h)h.value=String(m>>>0);}
+async function applyPreset(sel){const id=sel.value;if(!id)return;
+ say('preset','applying...');
+ try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({display:{color_preset:id}})});
+  const j=await r.json();
+  if(!r.ok||!j.ok){say('preset',j.error||('HTTP '+r.status),'bad');return;}
+  say('preset','applied','ok');await loadConfig();}catch(e){say('preset',String(e),'bad');}
+ sel.value='';}
 // ---- world clock: four rows of zone, custom rule and label ----
 function buildWorld(){const g=$('#wzgrid');if(!g||g.dataset.built)return;g.dataset.built='1';
  for(let i=0;i<4;i++){const d=document.createElement('div');d.className='row';d.style.gap='8px';d.style.marginBottom='6px';

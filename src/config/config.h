@@ -120,6 +120,8 @@ struct DisplayConfig {
   bool transitions = true;          // slide pages in from the right
   bool precip_fx = true;            // animated rain / snow / lightning behind the weather pages
   bool holiday_themes = true;       // holiday colours and effects on special dates
+  uint32_t holidays_enabled = 0xFFFFFFFF;   // one bit per built-in holiday, by its position in themes::HOLIDAYS
+  char force_theme[16] = "";        // show this theme id whatever the date; "" = pick it by date as usual
   bool moon_page = true;            // keep the moon-phase page in the rotation
   uint8_t sleep_fade_sec = 30;      // the sleep timer fades the panel out over this long
   HolidayConfig holidays[MAX_CUSTOM_HOLIDAYS];

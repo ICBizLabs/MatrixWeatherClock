@@ -553,6 +553,16 @@ switched off on the Location & Weather tab.
 **Countdowns.** Up to three dates on the Alarms tab, each with a label. Tick *every year* for a birthday or anniversary
 and it rolls forward once the day has passed; leave it clear and give a full date for a one-off.
 
+**Colour themes.** The Colours card offers eight palettes -- Default, Mono, Amber, Ocean, Sunset, Forest, Neon and a
+deep-red Night for a bedside clock. Picking one writes its six colours into the pickers, which you can then change
+however you like; nothing is remembered behind your back, so the pickers are always what the clock is using.
+
+**Holiday themes.** The nine built-in holidays each have their own colours and a decoration, and each can be switched
+off on its own if you would rather skip it. "Show one now" pins any of them whatever the date, which is also how you
+look at one without waiting for December. A pinned or holiday theme outranks your own colours while it is on, and its
+decoration still gives way to real rain or snow, to night mode, and to an alarm or alert. Colours that carry meaning --
+the UV bands, alert severities, air quality and the trend arrows -- stay as they are under every theme.
+
 **Your own dates.** The Display tab takes up to four dates of your own on top of the nine built-in holidays. On that day
 the clock and date take the colour you choose, with a sparkle effect. Yours win if a built-in holiday falls on the same
 day.

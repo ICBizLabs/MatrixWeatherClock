@@ -8,6 +8,7 @@
 #include "config/config.h"
 #include "display/panel.h"
 #include "display/renderer.h"
+#include "display/themes.h"
 #include "display/wmo.h"
 #include "net/wifi_manager.h"
 #include "net/net_task.h"
@@ -169,6 +170,7 @@ namespace web {
       lg["latest_bearing"] = lst.latest_bearing; lg["latest_age_s"] = lst.latest_time ? (long)(time(nullptr) - lst.latest_time) : -1;
       lg["total"] = lst.total;
       sys["theme"] = renderer::themeName();
+      sys["theme_forced"] = g_cfg.display.force_theme[0] != '\0';
       sys["full_screen_block"] = renderer::fullScreenBlockReason();
       JsonObject dm = root["demo"].to<JsonObject>();
       dm["on"] = renderer::demoActive();
@@ -349,6 +351,22 @@ namespace web {
         o["id"] = page_name(i);
         o["label"] = page_label(i);
       }
+      // The two theme tables, so the UI's tick boxes and pickers are generated from the firmware rather than
+      // duplicated in JavaScript. "holiday" says which are chosen by the date; "bit" is the holidays_enabled bit.
+      JsonArray th = root["themes_available"].to<JsonArray>();
+      for (size_t i = 0; i < themes::HOLIDAY_COUNT; i++) {
+        JsonObject o = th.add<JsonObject>();
+        o["id"] = themes::HOLIDAYS[i].id;
+        o["name"] = themes::HOLIDAYS[i].name;
+        o["holiday"] = true;
+        o["bit"] = (uint8_t)i;
+      }
+      for (size_t i = 0; i < themes::PALETTE_COUNT; i++) {
+        JsonObject o = th.add<JsonObject>();
+        o["id"] = themes::PALETTES[i].id;
+        o["name"] = themes::PALETTES[i].name;
+        o["holiday"] = false;
+      }
       JsonArray tz = root["tz_options"].to<JsonArray>();     // short list only; the full table is /api/timezones
       for (size_t i = 0; i < TZ_COMMON_LEN && i < TZ_TABLE_LEN; i++) {
         JsonObject o = tz.add<JsonObject>();
@@ -409,6 +427,21 @@ namespace web {
         const char* posix = tz_posix_for(tj["tz_id"].as<const char*>());
         if (posix) strlcpy(next.time.tz_posix, posix, sizeof(next.time.tz_posix));
       }
+      // display.color_preset is write-only: naming a palette copies its six colours into display.colors and is
+      // never stored, so the colour pickers are always the truth and cannot drift from a remembered preset.
+      JsonObjectConst dj = json.as<JsonObjectConst>()["display"];
+      if (!dj.isNull() && dj["color_preset"].is<const char*>()) {
+        const char* pid = dj["color_preset"].as<const char*>();
+        if (*pid) {
+          const themes::Theme* pt = themes::byId(pid);
+          if (!pt) { sendJsonError(r, 400, "display.color_preset: unknown theme id"); return; }
+          ColorsConfig& cc = next.display.colors;
+          cc.time = pt->time; cc.date = pt->date; cc.temp = pt->temp;
+          cc.text = pt->text; cc.hi = pt->hi;     cc.lo = pt->lo;
+          changed |= CHG_DISPLAY;
+        }
+      }
+
       // same courtesy for the world clock: a zone id alone is enough, the table fills in the rule and the label
       JsonVariantConst wj = json.as<JsonObjectConst>()["world"];
       if (!wj.isNull()) {

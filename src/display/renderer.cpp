@@ -124,9 +124,14 @@ namespace renderer {
         default: return C_SEV_UNKNOWN;
       }
     }
+    // One accessor per configurable colour, each giving the active theme first refusal. Every drawing site goes
+    // through these: read g_cfg.display.colors directly and a theme will recolour the rest of the panel but not you.
     uint16_t colTime() { return Canvas::rgb(theme ? theme->time : g_cfg.display.colors.time); }
     uint16_t colDate() { return Canvas::rgb(theme ? theme->date : g_cfg.display.colors.date); }
     uint16_t colText() { return Canvas::rgb(theme ? theme->text : g_cfg.display.colors.text); }
+    uint16_t colTemp() { return Canvas::rgb(theme ? theme->temp : g_cfg.display.colors.temp); }
+    uint16_t colHi()   { return Canvas::rgb(theme ? theme->hi   : g_cfg.display.colors.hi); }
+    uint16_t colLo()   { return Canvas::rgb(theme ? theme->lo   : g_cfg.display.colors.lo); }
 
     void classicFont(Adafruit_GFX& c) { c.setFont(nullptr); c.setTextSize(1); c.setTextWrap(false); c.cp437(true); }
     void tinyFont(Adafruit_GFX& c) { c.setFont(&TomThumb); c.setTextSize(1); c.setTextWrap(false); }
@@ -274,7 +279,7 @@ namespace renderer {
       classicFont(pc);
       if (!r.valid) { pc.drawTextCentered(env_sensor::present() ? "READING.." : "NO SENSOR", W / 2, Y_SINGLE, C_GREY); return; }
       const bool imperial = g_cfg.weather.imperial;
-      const uint16_t cTemp = Canvas::rgb(g_cfg.display.colors.temp), cText = colText();
+      const uint16_t cTemp = colTemp(), cText = colText();
       drawHouseIcon(pc, ICON_X, 0);
       char b[16];
       int16_t x = TEXT_X;
@@ -451,7 +456,7 @@ namespace renderer {
       fmtClock12(t2, sizeof(t2), b.tm_hour * 60 + b.tm_min);
       snprintf(l1, sizeof(l1), "%s %s", first.high ? "HI" : "LO", t1);
       snprintf(l2, sizeof(l2), "%s %s", second.high ? "HI" : "LO", t2);
-      const uint16_t cHi = Canvas::rgb(g_cfg.display.colors.hi), cLo = Canvas::rgb(g_cfg.display.colors.lo);
+      const uint16_t cHi = colHi(), cLo = colLo();
       pc.drawText(l1, 2, Y_L1, first.high ? cHi : cLo);
       pc.drawText(l2, 2, Y_L2, second.high ? cHi : cLo);
       // rising / falling arrow after the first line
@@ -471,7 +476,7 @@ namespace renderer {
       char l2[24];
       tempText(l2, sizeof(l2), d.water_temp, true);
       pc.drawTextCentered("WATER", W / 2, Y_L1, colDate());
-      pc.drawTextCentered(l2, W / 2, Y_L2, Canvas::rgb(0x40C0FF));
+      pc.drawTextCentered(l2, W / 2, Y_L2, colTemp());      // a temperature, so it follows the temperature colour
     }
     // ---- world clock ----
     // The rows are worked out twice a second in the slow tick and everything that shows another zone reads this
@@ -592,7 +597,7 @@ namespace renderer {
       if (id == PAGE_WATER) { tide::Data td; if (demo.on) td = demoTide; else tide::get(td); drawWaterPage(pc, td); return; }
       if (id == PAGE_WORLD) { drawWorldPage(pc); return; }
       if (id == PAGE_EVENT) { drawEventPage(pc, lt, timeValid || demo.on); return; }
-      const uint16_t cText = colText(), cTemp = Canvas::rgb(g_cfg.display.colors.temp), cDate = colDate();
+      const uint16_t cText = colText(), cTemp = colTemp(), cDate = colDate();
       char l1[32], l2[32];
       if (id == PAGE_DATE) {
         if (!timeValid) { drawStatusLine(pc); return; }
@@ -601,7 +606,7 @@ namespace renderer {
         else if (g_cfg.time.date_order == 2) snprintf(l2, sizeof(l2), "%02d-%02d", lt.tm_mon + 1, lt.tm_mday);
         else snprintf(l2, sizeof(l2), "%s %d", MON_NAMES[lt.tm_mon % 12], lt.tm_mday);
         pc.drawTextCentered(l1, W / 2, Y_L1, cDate);
-        pc.drawTextCentered(l2, W / 2, Y_L2, cText);
+        pc.drawTextCentered(l2, W / 2, Y_L2, cDate);   // the number line too, so "Date" colours the whole page
         return;
       }
       if (!wx.valid) { pc.drawTextCentered(wifi_mgr::isConnected() ? "WEATHER.." : "NO WIFI", W / 2, Y_SINGLE, C_GREY); return; }
@@ -634,8 +639,8 @@ namespace renderer {
             char h[40], l[40];
             snprintf(h, sizeof(h), "H %s", l1);
             snprintf(l, sizeof(l), "L %s", l2);
-            pc.drawText(h, TEXT_X, Y_L1, Canvas::rgb(g_cfg.display.colors.hi));
-            pc.drawText(l, TEXT_X, Y_L2, Canvas::rgb(g_cfg.display.colors.lo));
+            pc.drawText(h, TEXT_X, Y_L1, colHi());
+            pc.drawText(l, TEXT_X, Y_L2, colLo());
           }
           break;
         case PAGE_FEELS:
@@ -651,8 +656,8 @@ namespace renderer {
           snprintf(l1, sizeof(l1), "RISE %s", t);
           fmtClock12(t, sizeof(t), wx.sunset_min);
           snprintf(l2, sizeof(l2), "SET %s", t);
-          pc.drawTextCentered(l1, W / 2, Y_L1, Canvas::rgb(0xFFD060));
-          pc.drawTextCentered(l2, W / 2, Y_L2, Canvas::rgb(0xFF8060));
+          pc.drawTextCentered(l1, W / 2, Y_L1, colTemp());
+          pc.drawTextCentered(l2, W / 2, Y_L2, colHi());
           break;
         }
         case PAGE_UV: {
@@ -687,7 +692,7 @@ namespace renderer {
           else if (wx.imperial) snprintf(l1, sizeof(l1), "RAIN %.2f\"", today);
           else snprintf(l1, sizeof(l1), "RAIN %.1fMM", today);
           snprintf(l2, sizeof(l2), "CHANCE %d%%", (int)wx.daily[0].pop);
-          pc.drawTextCentered(l1, W / 2, Y_L1, Canvas::rgb(0x60A0FF));
+          pc.drawTextCentered(l1, W / 2, Y_L1, colLo());
           pc.drawTextCentered(l2, W / 2, Y_L2, cText);
           break;
         }
@@ -784,10 +789,10 @@ namespace renderer {
         case 14: demo.name = "timer";      demo.timer = true; demo.timerEnd = now + 754000UL; break;
         case 15: demo.name = "timer done"; demo.ringing = true; demo.ringTimer = true; break;
         case 16: demo.name = "message";    showMessage("Demo mode - messages scroll here", DEMO_STEP_MS, 0x40C0FF); break;
-        case 17: demo.name = "christmas";  demo.wx = demoWeather(3, true, 34, 28, 70, 8, 12, 10); demo.theme = themes::forDate(themes::sample(themes::Sample::Christmas)); demo.page = PAGE_DATE; break;
-        case 18: demo.name = "july 4th";   demo.wx = demoWeather(0, true, 88, 90, 35, 6, 10, 180); demo.theme = themes::forDate(themes::sample(themes::Sample::July4)); demo.page = PAGE_DATE; break;
-        case 19: demo.name = "valentine";  demo.theme = themes::forDate(themes::sample(themes::Sample::Valentine)); demo.page = PAGE_TEMP; break;
-        case 20: demo.name = "halloween";  demo.wx = demoWeather(2, false, 52, 49, 60, 5, 9, 90); demo.theme = themes::forDate(themes::sample(themes::Sample::Halloween)); demo.page = PAGE_DATE; break;
+        case 17: demo.name = "christmas";  demo.wx = demoWeather(3, true, 34, 28, 70, 8, 12, 10); demo.theme = themes::byId("christmas"); demo.page = PAGE_DATE; break;
+        case 18: demo.name = "july 4th";   demo.wx = demoWeather(0, true, 88, 90, 35, 6, 10, 180); demo.theme = themes::byId("july4"); demo.page = PAGE_DATE; break;
+        case 19: demo.name = "valentine";  demo.theme = themes::byId("valentine"); demo.page = PAGE_TEMP; break;
+        case 20: demo.name = "halloween";  demo.wx = demoWeather(2, false, 52, 49, 60, 5, 9, 90); demo.theme = themes::byId("halloween"); demo.page = PAGE_DATE; break;
         case 21: demo.name = "night mode"; demo.night = true; break;
         case 22: demo.name = "indoor";     demo.page = PAGE_INDOOR; demo.indoorSet = true; demo.indoor = env_sensor::Reading();
                  demo.indoor.valid = demo.indoor.has_humidity = demo.indoor.sea_level_known = true;
@@ -938,8 +943,8 @@ namespace renderer {
         snprintf(hi, sizeof(hi), "%d", (int)lroundf(d.tmax));
         snprintf(lo, sizeof(lo), "%d", (int)lroundf(d.tmin));
         tinyFont(c);
-        c.drawText(hi, x, FC_TEMP_Y, Canvas::rgb(g_cfg.display.colors.hi));
-        c.drawTextRight(lo, x + FC_COL_W - 2, FC_TEMP_Y, Canvas::rgb(g_cfg.display.colors.lo));
+        c.drawText(hi, x, FC_TEMP_Y, colHi());
+        c.drawTextRight(lo, x + FC_COL_W - 2, FC_TEMP_Y, colLo());
         if (i) c.drawFastVLine(x - 1, 1, H - 2, 0x2104);
       }
     }
@@ -953,7 +958,7 @@ namespace renderer {
       const int16_t x0 = 13, x1 = W - 2, top = 2, bot = 15;
       auto px = [&](uint8_t i) { return (int16_t)(x0 + (int32_t)i * (x1 - x0) / (n - 1)); };
       auto py = [&](float t) { return (int16_t)(bot - (int16_t)lroundf((t - tmin) / range * (bot - top))); };
-      for (uint8_t i = 0; i + 1 < n; i++) c.drawLine(px(i), py(wx.hourly[i].temp), px(i + 1), py(wx.hourly[i + 1].temp), Canvas::rgb(g_cfg.display.colors.temp));
+      for (uint8_t i = 0; i + 1 < n; i++) c.drawLine(px(i), py(wx.hourly[i].temp), px(i + 1), py(wx.hourly[i + 1].temp), colTemp());
       for (uint8_t i = 0; i < n; i++) {
         int16_t h = (int16_t)(wx.hourly[i].pop * 12 / 100);
         if (h) c.fillRect(px(i) - 1, H - h, 3, h, Canvas::color565(40, 90, 220));
@@ -962,8 +967,8 @@ namespace renderer {
       c.drawFastHLine(x0, 18, x1 - x0 + 1, 0x2104);
       tinyFont(c);
       char b[8];
-      snprintf(b, sizeof(b), "%d", (int)lroundf(tmax)); c.drawText(b, 0, 0, Canvas::rgb(g_cfg.display.colors.hi));
-      snprintf(b, sizeof(b), "%d", (int)lroundf(tmin)); c.drawText(b, 0, 11, Canvas::rgb(g_cfg.display.colors.lo));
+      snprintf(b, sizeof(b), "%d", (int)lroundf(tmax)); c.drawText(b, 0, 0, colHi());
+      snprintf(b, sizeof(b), "%d", (int)lroundf(tmin)); c.drawText(b, 0, 11, colLo());
       c.drawText("12H", 0, 20, C_GREY);
       c.drawText("%", 0, 27, Canvas::color565(40, 90, 220));
     }
@@ -1235,7 +1240,12 @@ namespace renderer {
     uint16_t ms = 0;
     const bool timeValid = timesvc::localNow(lt, &ms);
     if (slowTick) refreshWorld(lt, timeValid);
-    theme = demo.on ? demo.theme : ((timeValid && g_cfg.display.holiday_themes) ? themes::forDate(lt) : nullptr);
+    // demo wins, then a theme you have pinned, then today's holiday. byId() returning nullptr on an unknown id is
+    // what makes a stale or mistyped force_theme fall back to the usual behaviour instead of blanking the panel.
+    const themes::Theme* forced = themes::byId(g_cfg.display.force_theme);
+    theme = demo.on ? demo.theme
+                    : (forced ? forced
+                              : ((timeValid && g_cfg.display.holiday_themes) ? themes::forDate(lt) : nullptr));
 
     uint8_t bri = decideBrightness(lt, timeValid);
     if (bri != lastBri) { panel::setBrightness(bri); lastBri = bri; }

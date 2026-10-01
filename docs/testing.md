@@ -184,3 +184,31 @@ pio device monitor           # serial log at 115200
     which is the check that the widened `uint32_t` flag word and the new `CHG_WORLD` bit did not shift anything.
     **`tm_isdst`** – `posix_tz::zone_tm` sets it (New York September 1, January 0, Sydney the other way round,
     Arizona always 0). Nothing reads it today, but returning 0 all year would quietly break whatever does first.
+
+11. **0.17.0 additions** – verified on the device at 192.168.4.77 on 2026-10-01.
+    **The structural fix first.** A theme used to carry only three of the six colours, and `temp`, `hi` and `lo` were
+    read straight from config at ten sites, so on Christmas the clock turned red and the date green while the forecast
+    strip and the high/low page stayed on the everyday orange and blue. `themes::Theme` now carries all six and
+    `renderer.cpp` has `colTemp()`/`colHi()`/`colLo()` beside the existing three; every drawing site goes through an
+    accessor. **If you add a colour, add an accessor** -- reading `g_cfg.display.colors` directly is how half the
+    panel stops following a theme.
+    Four sites also hardcoded a copy of a config default, so the setting had no effect there: the sunrise and sunset
+    lines, the rainfall line and the sea temperature. They read their fields now. The date page's number line used the
+    *text* colour, so "Date" only painted the weekday; the whole page takes the date colour now.
+    **Palettes** – eight, applied by `POST /api/config {"display":{"color_preset":"ocean"}}`, which is write-only and
+    copies the six colours into `display.colors`. Verified by parsing `src/display/themes.cpp` for the expected values
+    and comparing against both `/api/config` and the actual pixels in `/api/frame`: all eight matched exactly, the
+    clock digits included. Also checked that a colour tweaked by hand after applying a palette survives a later save,
+    which is the property that makes "the pickers are the truth" true.
+    **Holiday control** – `display.holidays_enabled` is a bitmask by table position, so `themes::HOLIDAYS` is
+    **append-only**; inserting or reordering would silently remap which holidays somebody had switched off. All nine
+    were forced in turn and the forecast strip was confirmed themed, which is the thing that did not work before.
+    Forcing a holiday that is unticked still works, by design. An unknown id in `force_theme` or `color_preset` is
+    rejected with HTTP 400, and the renderer falls back to automatic if one ever goes stale.
+    **A trap worth knowing when testing this.** A pinned theme outranks `display.colors`, so if `force_theme` is set,
+    applying a palette writes the config and changes nothing on the panel. My first verification run failed eight
+    palette checks for exactly this reason -- the clock was pinned to New Year's Eve, and every "wrong" colour decoded
+    to that theme's gold. Clear `force_theme` before testing colours. The Colours card now says so on screen when a
+    theme is pinned.
+    The other first-run failures were the test grabbing `/api/frame` after the forecast screen had already timed out;
+    assert the screen is actually up (`sys.screen`) before reading pixels.

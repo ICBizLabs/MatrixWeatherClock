@@ -1,6 +1,7 @@
 // AppConfig <-> JSON in both directions, with server-side validation. One place for every key name.
 #include "config.h"
 #include "io/actions.h"
+#include "display/themes.h"
 #include "util/timeutil.h"
 #include <strings.h>
 
@@ -294,6 +295,19 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, Stri
     if (!getBool(o, "transitions", d.transitions, t, err)) return false;
     if (!getBool(o, "precip_fx", d.precip_fx, t, err)) return false;
     if (!getBool(o, "holiday_themes", d.holiday_themes, t, err)) return false;
+    if (!getNum(o, "holidays_enabled", d.holidays_enabled, t, err, 0, 4294967295.0)) return false;
+    // An id from themes::HOLIDAYS or themes::PALETTES, or "" for the usual by-the-date behaviour. Checked here so a
+    // typo is reported rather than silently ignored; the renderer falls back anyway if a theme is ever removed.
+    {
+      char ft[16] = "";
+      bool ht = false;
+      if (!getStr(o, "force_theme", ft, ht, err)) return false;
+      if (ht) {
+        if (ft[0] && !themes::byId(ft)) { err = "display.force_theme: unknown theme id"; return false; }
+        strlcpy(d.force_theme, ft, sizeof(d.force_theme));
+        t = true;
+      }
+    }
     if (!getBool(o, "moon_page", d.moon_page, t, err)) return false;
     JsonObjectConst s = o["schedule"];
     if (!s.isNull()) {
@@ -763,6 +777,8 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["transitions"] = d.transitions;
   o["precip_fx"] = d.precip_fx;
   o["holiday_themes"] = d.holiday_themes;
+  o["holidays_enabled"] = d.holidays_enabled;
+  o["force_theme"] = d.force_theme;
   o["moon_page"] = d.moon_page;
   o["sleep_fade_sec"] = d.sleep_fade_sec;
   {
