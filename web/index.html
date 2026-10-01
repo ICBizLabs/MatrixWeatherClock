@@ -619,7 +619,12 @@ function fillThemes(){const m=Number((cfg.display&&cfg.display.holidays_enabled)
  if(n){const t=(cfg.themes_available||[]).find(x=>x.id===f);
   n.hidden=!f;n.textContent=f?('The "'+(t?t.name:f)+'" theme is pinned under Holiday themes, so it is painting the panel instead of these colours. Set "Show one now" back to Automatic to use them.'):'';}}
 // Mirrors the page picker: the ticks are the UI, a hidden data-k field is what actually gets posted.
-function syncHolidayBits(){let m=0;$$('.hol-en').forEach(el=>{if(el.checked)m|=(1<<Number(el.dataset.bit));});
+// Only the bits we drew a tick box for are rewritten; the rest of the stored mask is carried through
+// untouched. Otherwise saving this page would clear the bits for holidays a newer firmware has added
+// but this page did not render, and those holidays would come back switched off for no visible reason.
+function syncHolidayBits(){const b=$$('.hol-en');if(!b.length)return;
+ let m=Number((cfg.display&&cfg.display.holidays_enabled)??0xFFFFFFFF)>>>0;
+ b.forEach(el=>{const t=1<<Number(el.dataset.bit);m=el.checked?(m|t):(m&~t);});
  const h=$('#holidaysbits');if(h)h.value=String(m>>>0);}
 async function applyPreset(sel){const id=sel.value;if(!id)return;
  say('preset','applying...');

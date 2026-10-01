@@ -565,7 +565,8 @@ the UV bands, alert severities, air quality and the trend arrows -- stay as they
 
 **Your own dates.** The Display tab takes up to four dates of your own on top of the nine built-in holidays. On that day
 the clock and date take the colour you choose, with a sparkle effect. Yours win if a built-in holiday falls on the same
-day.
+day. Only the clock and date change: the temperature, text and high/low keep whatever colours you have set, so one of
+your own dates reads as your usual panel with those two lines recoloured, not as a different palette.
 
 **Date format.** The date page can read month-first (`SEP 27`), day-first (`27 SEP`) or numeric (`09-27`).
 

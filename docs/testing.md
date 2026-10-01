@@ -203,6 +203,12 @@ pio device monitor           # serial log at 115200
     **Holiday control** – `display.holidays_enabled` is a bitmask by table position, so `themes::HOLIDAYS` is
     **append-only**; inserting or reordering would silently remap which holidays somebody had switched off. All nine
     were forced in turn and the forecast strip was confirmed themed, which is the thing that did not work before.
+    The default is `0xFFFFFFFF`, which means "every holiday, including ones a later firmware adds". `syncHolidayBits`
+    in the web UI therefore rewrites **only the bits it drew a tick box for** and carries the rest of the stored mask
+    through untouched (v0.17.1 -- the first version wrote a mask built from zero, so one Save from an older page would
+    have switched off every holiday added after it). Regression check: extract `syncHolidayBits` from the page the
+    device is serving and run it under node against a stub DOM -- nine ticked against a stored `0x3FF` must still post
+    `0x3FF`, not `0x1FF`.
     Forcing a holiday that is unticked still works, by design. An unknown id in `force_theme` or `color_preset` is
     rejected with HTTP 400, and the renderer falls back to automatic if one ever goes stale.
     **A trap worth knowing when testing this.** A pinned theme outranks `display.colors`, so if `force_theme` is set,
