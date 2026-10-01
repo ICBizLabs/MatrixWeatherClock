@@ -46,8 +46,8 @@ arrives, and is configured entirely through its own web interface.
   phone shortcuts.
 - **More screens**: 12-hour temperature and rain-chance graph, sunrise/sunset page, brightness that follows the sun,
   an **ultraviolet index** page with the WHO exposure band, a **sky** page with cloud cover and visibility, a **rain**
-  page with today's total and chance, **sea temperature** at your tide station, a **world clock** for a second time
-  zone, and a **countdown** to up to three dates of your own.
+  page with today's total and chance, **sea temperature** at your tide station, a **world clock** showing up to four
+  places at once with a marker when they are on another day, and a **countdown** to up to three dates of your own.
 - **Polish**: pages slide in, rain/snow/lightning animate behind the weather, holiday colour themes with confetti, snow,
   hearts or sparkles on the day, plus up to four **dates of your own** that colour the clock, and a date format that
   can read month-first, day-first or numeric.
@@ -543,7 +543,7 @@ is safe even if the source is not set up.
 | `sky` | Cloud cover as a percentage and visibility in miles or kilometres |
 | `rain` | Rainfall so far today and the chance of more |
 | `water` | Sea temperature at your tide station, when that station reports one |
-| `world` | The time in a second zone you pick, with a short label of your own |
+| `world` | The time in the first zone of your world clock, with a short label of your own |
 | `event` | Days to whichever of your countdowns is nearest, or "TODAY" on the day |
 
 The ultraviolet index, cloud cover, visibility and rainfall come from the weather request that was already being made,

@@ -1,23 +1,19 @@
 #pragma once
-#include <string.h>
+#include <stddef.h>
 
-// US time zones offered in the web UI; tz_posix is what the firmware actually applies (setenv TZ).
+// Time zones offered in the web UI. There is no IANA database on the device, so each zone carries a POSIX rule:
+// the main clock hands its own to the C library (setenv TZ), and the world clock evaluates the others with
+// time/posix_tz.h. Every rule here is checked against the real IANA database by tools/check_timezones.py, which
+// parses tz_table.cpp -- run it after touching the table. A wrong daylight-saving rule looks perfect for months and
+// then goes an hour out.
 struct TzEntry { const char* id; const char* label; const char* posix; };
-static const TzEntry TZ_TABLE[] = {
-  { "America/New_York",    "Eastern",       "EST5EDT,M3.2.0,M11.1.0" },
-  { "America/Chicago",     "Central",       "CST6CDT,M3.2.0,M11.1.0" },
-  { "America/Denver",      "Mountain",      "MST7MDT,M3.2.0,M11.1.0" },
-  { "America/Phoenix",     "Arizona",       "MST7" },
-  { "America/Los_Angeles", "Pacific",       "PST8PDT,M3.2.0,M11.1.0" },
-  { "America/Anchorage",   "Alaska",        "AKST9AKDT,M3.2.0,M11.1.0" },
-  { "Pacific/Honolulu",    "Hawaii",        "HST10" },
-  { "America/Puerto_Rico", "Atlantic (PR)", "AST4" },
-  { "Pacific/Guam",        "Guam",          "ChST-10" },
-  { "Etc/UTC",             "UTC",           "UTC0" },
-};
-constexpr size_t TZ_TABLE_LEN = sizeof(TZ_TABLE) / sizeof(TZ_TABLE[0]);
 
-inline const char* tz_posix_for(const char* id) {
-  for (size_t i = 0; i < TZ_TABLE_LEN; i++) if (strcmp(TZ_TABLE[i].id, id) == 0) return TZ_TABLE[i].posix;
-  return nullptr;
-}
+extern const TzEntry TZ_TABLE[];
+extern const size_t TZ_TABLE_LEN;
+// The first TZ_COMMON_LEN entries are UTC and the US zones: the short list the first-boot wizard offers, and all
+// that /api/config carries. The whole table is served separately by GET /api/timezones, because 78 zones is far too
+// much to put in a document that every page load fetches and the settings-restore path posts back whole.
+extern const size_t TZ_COMMON_LEN;
+
+const char* tz_posix_for(const char* id);   // nullptr when the id is not in the table
+const char* tz_label_for(const char* id);   // nullptr when the id is not in the table

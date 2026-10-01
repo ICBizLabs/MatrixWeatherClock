@@ -104,9 +104,6 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="time.use_24h" type="checkbox">24-hour clock</label>
   <label class="chk"><input data-k="time.show_seconds" type="checkbox">Show seconds</label>
   <label>Date format<select data-k="time.date_order"><option value="mdy">Month first (SEP 27)</option><option value="dmy">Day first (27 SEP)</option><option value="iso">Numeric (09-27)</option></select></label>
-  <label>Second time zone<select id="tz2sel" data-k="time.tz2_id"></select></label>
-  <label>Second POSIX TZ (custom)<input data-k="time.tz2_posix" maxlength="63"></label>
-  <label>Label for that zone<input data-k="time.tz2_label" maxlength="9" placeholder="LONDON"></label>
  </div>
  <div class="row"><input id="geoq" placeholder="City or ZIP code, e.g. Denver or 80202" style="min-width:240px" onkeydown="if(event.key==='Enter')geosearch()">
   <button class="btn sec" onclick="geosearch()">Find</button>
@@ -233,6 +230,16 @@ progress{width:100%;height:10px}
   <label>Radar data<select data-k="radar.source"><option value="nowcoast">NOAA nowCOAST MRMS mosaic (quality controlled)</option><option value="mesonet">Iowa Mesonet NEXRAD composite (unfiltered)</option></select></label>
   <label>Base map under the echoes<select data-k="radar.base_map"><option value="both">Coastline and water tint</option><option value="coast">Coastline only</option><option value="landwater">Water tint only</option><option value="none">None</option></select></label>
  </div><div class="row"><button class="btn" onclick="save('display')">Save</button><span class="msg" id="msg-radar-cfg"></span></div>
+ <div class="card"><h2>World clock</h2>
+  <p class="msg">Up to four places at once on a full screen. Pick a zone, or type a POSIX TZ rule of your own for somewhere not listed. The label is what shows on the panel; leave it blank to use the name of the zone.</p>
+  <div id="wzgrid"></div>
+  <div class="grid">
+   <label class="chk"><input data-k="world.enabled" type="checkbox">Take a turn among the full screens</label>
+   <label>...at most every N page cycles<input data-k="world.every_n_cycles" type="number" min="1" max="60"></label>
+   <label>Show for (seconds)<input data-k="world.show_sec" type="number" min="3" max="60"></label>
+  </div>
+  <div class="row"><button class="btn" onclick="saveWorld()">Save</button>
+   <button class="btn sec" onclick="post('/api/show?screen=world')">Show it now</button><span class="msg" id="msg-world"></span></div></div>
  <p class="msg">Radar from NOAA's nowCOAST map service: the MRMS reflectivity mosaic with birds, insects and clutter filtered out, the same product weather apps use. The unfiltered Iowa Mesonet NEXRAD composite stays available as an alternative. Either is cropped by the map server to the panel around your location; the newest image plus the 5 to 50 minutes-ago frames make an eleven-frame loop. A blinking cross marks home. The base map (coastline, land and water from NASA GIBS) is fetched once for your location and radius. US coverage only for the radar itself.</p></div>
 </section>
 
@@ -389,7 +396,7 @@ progress{width:100%;height:10px}
  <div id="rm-rows"></div>
  <div class="row"><button class="btn" onclick="saveRemote()">Save</button><button class="btn sec" onclick="addRemoteRow()">Add a button</button><span class="msg" id="msg-remote"></span></div></div>
  <div class="card"><h2>Phone remote</h2>
-  <p class="msg">Open <a href="/remote" style="color:var(--acc)">/remote</a> on a phone or tablet and add it to the home screen for a full-screen remote with big buttons: dismiss, next page, radar, forecast, hourly graph, timers, snooze and stop, brightness, night mode, mute, demo, refresh. Anything else can use <code>POST /api/action?name=next_page</code>; <code>GET /api/actions</code> lists the names.</p></div>
+  <p class="msg">Open <a href="/remote" style="color:var(--acc)">/remote</a> on a phone or tablet and add it to the home screen for a full-screen remote with big buttons: dismiss, next page, radar, forecast, hourly graph, world clock, timers, snooze and stop, brightness, night mode, mute, demo, refresh. Anything else can use <code>POST /api/action?name=next_page</code>; <code>GET /api/actions</code> lists the names.</p></div>
 </section>
 
 <section id="wifi">
@@ -459,12 +466,16 @@ async function save(section){const body=collect(section);if(section==='weather')
  if(!r.ok||!j.ok){say(section,j.error||('HTTP '+r.status),'bad');return;}
  say(section,'saved'+(j.reboot_required&&j.reboot_required.length?' — reboot required for: '+j.reboot_required.join(', '):''),j.reboot_required&&j.reboot_required.length?'warn':'ok');
  loadConfig();}catch(e){say(section,String(e),'bad');}}
-async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json();remoteRows();const t=$('#tzsel');t.innerHTML='';(cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;t.appendChild(o);});
- const t2=$('#tz2sel');if(t2){t2.innerHTML='';const none=document.createElement('option');none.value='';none.textContent='(off)';t2.appendChild(none);
-  (cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;t2.appendChild(o);});
-  t2.onchange=()=>{const op=t2.selectedOptions[0];const f=$('[data-k="time.tz2_posix"]');if(f)f.value=op&&op.dataset.posix?op.dataset.posix:'';};}
- buildHolidays();buildEvents();fillHolidays();fillEvents();buildPages();
- const custom=document.createElement('option');custom.value=cfg.time.tz_id;custom.textContent='Custom';if(!(cfg.tz_options||[]).some(z=>z.id===cfg.time.tz_id))t.appendChild(custom);
+// The whole zone table is its own endpoint: 78 zones is far too much to carry in /api/config, which every page load
+// fetches and the restore path posts back whole. Static, so once per page is enough.
+let tzAll=[];
+async function loadZones(){if(tzAll.length)return tzAll;try{const r=await fetch('/api/timezones');if(r.ok)tzAll=await r.json();}catch(e){}
+ if(!tzAll.length)tzAll=cfg&&cfg.tz_options?cfg.tz_options:[];return tzAll;}
+function zoneOptions(sel,blank){sel.innerHTML='';if(blank){const n=document.createElement('option');n.value='';n.textContent='(off)';sel.appendChild(n);}
+ tzAll.forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;o.dataset.label=z.label;sel.appendChild(o);});}
+async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json();remoteRows();await loadZones();const t=$('#tzsel');zoneOptions(t,false);
+ buildHolidays();buildEvents();fillHolidays();fillEvents();buildPages();buildWorld();fillWorld();
+ const custom=document.createElement('option');custom.value=cfg.time.tz_id;custom.textContent='Custom';if(!tzAll.some(z=>z.id===cfg.time.tz_id))t.appendChild(custom);
  fill();if(cfg.alarms)fillAlarms();t.onchange=()=>{const o=t.selectedOptions[0];if(o&&o.dataset.posix)$('[data-k="time.tz_posix"]').value=o.dataset.posix;};}
 async function setDemo(on){const j=await post('/api/demo',null,'on='+(on?1:0)+'&minutes='+(Number($('#demomin').value)||10)+'&sound='+($('#demosound').checked?1:0));if(!j||!j.ok)$('#demo').checked=!on;}
 async function sendMsg(){const t=$('#msgtext').value.trim();if(!t)return;await post('/api/message',{text:t,seconds:Number($('#msgsec').value)||0,chime:$('#msgchime').checked});}
@@ -573,6 +584,24 @@ async function saveEvents(){const events=[];for(let i=0;i<3;i++){const v=$('.ev-
   year:p?Number(p[0]):0,month:p?Number(p[1]):0,day:p?Number(p[2]):0});}
  say('events','saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events})});const j=await r.json();
  say('events',(!r.ok||!j.ok)?(j.error||('HTTP '+r.status)):'saved',(!r.ok||!j.ok)?'bad':'ok');}catch(e){say('events',String(e),'bad');}}
+// ---- world clock: four rows of zone, custom rule and label ----
+function buildWorld(){const g=$('#wzgrid');if(!g||g.dataset.built)return;g.dataset.built='1';
+ for(let i=0;i<4;i++){const d=document.createElement('div');d.className='row';d.style.gap='8px';d.style.marginBottom='6px';
+  d.innerHTML='<select class="wz-id" data-i="'+i+'" style="flex:1;min-width:170px"></select>'+
+   '<input class="wz-p" data-i="'+i+'" maxlength="63" placeholder="POSIX TZ (custom)" style="flex:1;min-width:140px">'+
+   '<input class="wz-l" data-i="'+i+'" maxlength="11" placeholder="Label" style="width:110px">';
+  g.appendChild(d);}
+ $$('.wz-id').forEach(sel=>{zoneOptions(sel,true);
+  sel.onchange=()=>{const o=sel.selectedOptions[0],i=sel.dataset.i;
+   $('.wz-p[data-i="'+i+'"]').value=o&&o.dataset.posix?o.dataset.posix:'';
+   const lab=$('.wz-l[data-i="'+i+'"]');if(o&&o.dataset.label&&!lab.value)lab.value=o.dataset.label.slice(0,11);};});}
+function fillWorld(){const z=(cfg.world&&cfg.world.zones)||[];for(let i=0;i<4;i++){const x=z[i]||{};const sel=$('.wz-id[data-i="'+i+'"]');if(!sel)continue;
+ if(x.id&&!tzAll.some(o=>o.id===x.id)){const c=document.createElement('option');c.value=x.id;c.textContent=x.id;sel.appendChild(c);}
+ sel.value=x.id||'';$('.wz-p[data-i="'+i+'"]').value=x.posix||'';$('.wz-l[data-i="'+i+'"]').value=x.label||'';}}
+async function saveWorld(){const zones=[];for(let i=0;i<4;i++)zones.push({id:$('.wz-id[data-i="'+i+'"]').value,posix:$('.wz-p[data-i="'+i+'"]').value.trim(),label:$('.wz-l[data-i="'+i+'"]').value.trim()});
+ const body={world:{zones,enabled:$('[data-k="world.enabled"]').checked,every_n_cycles:Number($('[data-k="world.every_n_cycles"]').value)||4,show_sec:Number($('[data-k="world.show_sec"]').value)||10}};
+ say('world','saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();
+ say('world',(!r.ok||!j.ok)?(j.error||('HTTP '+r.status)):'saved',(!r.ok||!j.ok)?'bad':'ok');if(r.ok&&j.ok)loadConfig();}catch(e){say('world',String(e),'bad');}}
 let pvBusy=false;
 async function preview(){if(pvBusy||!$('#pvlive').checked||!$('#status').classList.contains('on'))return;pvBusy=true;try{const r=await fetch('/api/frame',{cache:'no-store'});const b=new Uint8Array(await r.arrayBuffer());
  const [w,h]=(r.headers.get('X-Frame-Size')||'64x32').split('x').map(Number);const cv=$('#pv');cv.width=w*8;cv.height=h*8;const g=cv.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,cv.width,cv.height);
@@ -686,7 +715,7 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  s.alerts.items.forEach(x=>a.insertAdjacentHTML('beforeend','<div class="al '+x.severity+'"><b>'+x.event+'</b> <small>'+x.severity+(x.test?' · TEST':'')+(x.acknowledged?' · acknowledged':'')+'</small><br>'+x.headline+'<br><small>'+x.sender+' · '+x.area+'</small></div>'));
  const y=$('#st-sys');y.innerHTML='';row(y,'Uptime',Math.floor(s.uptime_s/3600)+'h '+Math.floor(s.uptime_s%3600/60)+'m');row(y,'Screen',s.sys.screen+(s.sys.night?' (night)':'')+', brightness '+s.sys.brightness);
  const D=s.demo||{};if(document.activeElement!==$('#demo'))$('#demo').checked=!!D.on;say('demo',D.on?'showing: '+D.scenario+' · '+Math.ceil(D.remaining_s/60)+' min left':'','ok');
- row(y,'Forecast / hourly screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
+ row(y,'Full screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'forecast, hourly graph, radar and world clock take turns every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
  row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
  row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});webhookStatus(s.webhook);indoorStatus(s.indoor,s.i2c);tideStatus(s.tide);radarStatus(s.radar);remoteStatus(s.remote);row(y,'Radar',s.radar&&s.radar.enabled?(s.radar.frames+' frames'+(s.radar.newest_age_min>=0?', newest '+s.radar.newest_age_min+' min old':'')+(s.radar.echo_near?' <span class="warn">echoes nearby</span>':'')+(s.radar.error?' <span class="bad">'+s.radar.error+'</span>':'')):'off');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
  const U=s.update||{};const ut=$('#st-update');if(ut){ut.innerHTML='';row(ut,'Installed','v'+U.current);row(ut,'Latest',U.latest?'v'+U.latest+(U.state==='available'?' <span class="warn">new version available</span>':U.state==='up-to-date'?' <span class="ok">up to date</span>':''):'not checked yet');

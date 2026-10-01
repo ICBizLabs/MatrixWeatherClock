@@ -57,9 +57,6 @@ struct TimeConfig {
   bool use_24h = false;
   bool show_seconds = false;
   uint8_t date_order = 0;       // 0 = month first (SEP 27), 1 = day first (27 SEP), 2 = ISO (09-27)
-  char tz2_id[40] = "";         // optional second zone for the world-clock page; "" = off
-  char tz2_posix[64] = "";
-  char tz2_label[10] = "";      // short label on that page, e.g. "LONDON"
 };
 struct WeatherConfig {
   bool enabled = true;
@@ -295,6 +292,19 @@ struct EventConfig {              // countdown to a date
 };
 struct EventsConfig { EventConfig items[MAX_EVENTS]; };
 
+constexpr uint8_t MAX_WORLD_ZONES = 4;
+struct WorldZone {                // one row of the world clock
+  char id[40] = "";               // IANA id picked from the list; "" when a POSIX rule was typed by hand
+  char posix[64] = "";            // the rule time/posix_tz.h evaluates; "" means this row is unused
+  char label[12] = "";            // shown on the panel, up to 11 characters; blank falls back to the zone's name
+};
+struct WorldConfig {              // full screen showing several zones at once
+  WorldZone zones[MAX_WORLD_ZONES];
+  bool enabled = true;            // takes a turn among the full screens, like the radar
+  uint8_t every_n_cycles = 4;     // and no more often than this many page cycles apart
+  uint8_t show_sec = 10;
+};
+
 struct AppConfig {
   WifiConfig wifi;
   LocationConfig location;
@@ -314,6 +324,7 @@ struct AppConfig {
   TideConfig tide;
   WebhookConfig webhook;
   EventsConfig events;
+  WorldConfig world;
   bool first_boot = true;
 };
 
@@ -321,7 +332,7 @@ struct AppConfig {
 enum : uint32_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
   CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192, CHG_REMOTE = 16384, CHG_TIDE = 32768,
-  CHG_WEBHOOK = 65536, CHG_EVENT = 131072
+  CHG_WEBHOOK = 65536, CHG_EVENT = 131072, CHG_WORLD = 262144
 };
 
 extern AppConfig g_cfg;

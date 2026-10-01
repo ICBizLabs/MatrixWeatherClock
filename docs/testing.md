@@ -70,9 +70,10 @@ pio device monitor           # serial log at 115200
    **Water temperature** – with a station that reports one, `/api/status | jq .tide.water_temp` appears within a
    refresh and the `water` page shows it. A station without a thermometer must leave the field absent and the page
    hidden, not show a wrong number.
-   **World clock** – pick a second zone on the Location & Weather tab, confirm the `world` page shows that zone's time
-   and, importantly, that the main clock and the tide times are still right afterwards. The timezone is process-global
-   and the conversion swaps it behind a guard, so this is where a regression would show.
+   **World clock** – set up to four zones on the Display tab, confirm the full screen shows them all and the `world`
+   page shows the first, and that the main clock and the tide times are still right afterwards. Since 0.16.0 the zone
+   conversion no longer borrows the process timezone (see `src/time/posix_tz.h`), so that last check should be dull --
+   but it is the one that would catch the regression if anything ever swaps TZ per lookup again.
    **Countdowns** – set a one-off and a yearly date, confirm the `event` page counts down, says `TOMORROW` the day
    before and `TODAY` on the day, and that a yearly date rolls to next year once it has passed.
    **Hourly chime** – set the clock a minute before the hour with `hourly_chime` and `hourly_strike` on: the hour
@@ -141,3 +142,45 @@ pio device monitor           # serial log at 115200
    The reported tendency needs history: `press_span_min` is 0 until about 20 minutes of fetches have accumulated,
    and the page says LEARNING TREND until 30 minutes, so the Zambretti text on a sensorless clock appears only
    after roughly half an hour. Worth re-checking a few hours after a reboot that `d_press_3h` becomes non-zero.
+
+10. **0.16.0 additions** – verified on the device at 192.168.4.77 on 2026-09-29.
+    **Zone table** – grew from ten US zones to 78 worldwide. `tools/check_timezones.py` is the standing check and
+    must keep passing: it parses `src/time/tz_table.cpp`, reads the system tzfiles, and compares both the C library's
+    POSIX parser and the firmware's own evaluator against the real IANA data at every instant from today through six
+    years out, plus every real transition to the minute. It caught two rules of mine that were genuinely wrong
+    (British Columbia and Alberta both went to permanent offsets during 2026, so `America/Vancouver` is `MST7` and
+    `America/Edmonton` is `CST6` while Toronto and Winnipeg still switch). Its horizon starts at today on purpose: a
+    single POSIX rule cannot also describe a zone's past, so verifying from today forward is the honest test.
+    Current result: 78 zones, 844,464 instants, 0 disagreements, plus 17 edge cases under UBSan and ASan.
+    **World clock screen** – four rows, label left and time right-aligned, with a `+1`/`-1` marker when that zone is
+    on another date. Verified by rebuilding the expected frame from the IANA data with the same TomThumb font and
+    comparing `GET /api/frame` pixel for pixel: exact matches for Singapore, Kyiv, UTC and Iran (`IRST-3:30`, a
+    half-hour offset), and for Hawaii showing `7:38P-1` while home was the next day. Right-aligned text ends at x=62,
+    not 63 -- `drawTextRight(s, W-1, ..)` draws at `W-1-textWidth`, the same one-pixel margin `drawForecast` uses.
+    **The heap leak, which is the thing to remember.** `timesvc::zoneNow` used to borrow the process timezone:
+    setenv, tzset, localtime_r, then put it back. On this newlib that leaks about 50 bytes per call. It was survivable
+    when only the old world *page* called it, but refreshing four rows twice a second meant 8 calls a second, and the
+    device lost **24 KB a minute** and panicked in `render:clock` with 600 bytes of heap left, every four minutes. It
+    was diagnosed by clearing the zones, which made the heap perfectly flat, and fixed by evaluating the POSIX rule
+    arithmetically in `src/time/posix_tz.cpp` -- no allocation, no global state, no lock. After the fix, four zones
+    configured: heap flat at ~96 KB free with `heap_largest` pinned at 51 KB over several minutes. If anything ever
+    calls setenv/tzset per lookup again, this is what it will look like.
+    **`GET /api/timezones`** – the same lesson in miniature. Built as an `AsyncJsonResponse` it cost ~40 KB of heap
+    for 5.3 KB of text, because ArduinoJson copies every string, and it did not hand it straight back: one call took
+    `heap_largest` from 56 KB to 31 KB. It is now generated a chunk at a time straight out of flash. Ten consecutive
+    calls: identical 5,334-byte payloads, `heap_largest` unchanged at 34,804.
+    **Legacy migration** – a config carrying only the pre-0.16.0 `time.tz2_*` keys puts them in `world.zones[0]` and
+    reports `applied:["world"]`; confirmed on the device with the rows cleared first.
+    **On a schedule** – watched for 22 minutes without prompting it: the four full screens took turns in clean
+    round-robin order, radar then world then forecast then hourly, one each about five minutes apart, and the world
+    clock stayed up for its `show_sec`. Worth knowing before testing this: with `page_sec` 6 and
+    `forecast_every_n_cycles` 3 an opportunity only comes round every few minutes, and there are four candidates, so
+    a five-minute look is not long enough to conclude anything.
+    **On demand** – `POST /api/show?screen=world`, `POST /api/action?name=show_world` and the phone remote button all
+    work. The world branch sits above the `!wx.valid` gate in `requestFullScreen` on purpose: a world clock needs no
+    weather. It also refreshes the cache itself when asked while empty, so the first request right after saving zones
+    is not refused.
+    **Change flags** – every section posted its own current values straight back and each was listed in `applied`,
+    which is the check that the widened `uint32_t` flag word and the new `CHG_WORLD` bit did not shift anything.
+    **`tm_isdst`** – `posix_tz::zone_tm` sets it (New York September 1, January 0, Sydney the other way round,
+    Arizona always 0). Nothing reads it today, but returning 0 all year would quietly break whatever does first.

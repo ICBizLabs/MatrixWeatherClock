@@ -26,12 +26,14 @@
 #include "time/time_service.h"
 #include "alarm/alarm.h"
 #include "util/timeutil.h"
+#include "time/tz_table.h"
+#include <ctype.h>
 #include "version.h"
 
 namespace renderer {
   namespace {
     using namespace layout;
-    enum class Screen : uint8_t { Splash, Composite, Forecast, Hourly, Radar, Test };
+    enum class Screen : uint8_t { Splash, Composite, Forecast, Hourly, Radar, World, Test };
     Screen screen = Screen::Splash;
     uint32_t screenUntil = 0, testStart = 0;
     bool otaActive = false;
@@ -50,7 +52,8 @@ namespace renderer {
     bool transFromLightning = false, showLightningPage = false, lightningTurn = false;
     int8_t briOffset = 0;                       // remote brightness steps (x16)
     uint8_t nightOvr = 0;                       // 0 auto, 1 on, 2 off
-    uint8_t cyclesSinceFull = 0, cyclesSinceRadar = 0;
+    // page cycles since each full screen last had its turn, so each can be spaced out on its own terms
+    uint8_t cyclesSinceFull = 0, cyclesSinceRadar = 0, cyclesSinceWorld = 0;
     uint8_t fullTurn = 0;                       // round-robin over the enabled full screens
     uint16_t* radarFrame = nullptr;             // PSRAM, W*H pixels (allocated in begin)
     uint8_t* radarBase = nullptr;               // PSRAM, W*H mask bytes
@@ -437,7 +440,13 @@ namespace renderer {
       const tide::Extreme& first = hi.t < lo.t ? hi : lo;
       const tide::Extreme& second = hi.t < lo.t ? lo : hi;
       char t1[12], t2[12], l1[24], l2[24];
-      struct tm a, b; localtime_r(&first.t, &a); localtime_r(&second.t, &b);
+      // The C library timezone is process-global and applyTz can change it under us, so every conversion takes the
+      // guard. These two were the only unguarded ones left in the tree.
+      struct tm a, b;
+      timesvc::tzLock();
+      localtime_r(&first.t, &a);
+      localtime_r(&second.t, &b);
+      timesvc::tzUnlock();
       fmtClock12(t1, sizeof(t1), a.tm_hour * 60 + a.tm_min);
       fmtClock12(t2, sizeof(t2), b.tm_hour * 60 + b.tm_min);
       snprintf(l1, sizeof(l1), "%s %s", first.high ? "HI" : "LO", t1);
@@ -464,15 +473,49 @@ namespace renderer {
       pc.drawTextCentered("WATER", W / 2, Y_L1, colDate());
       pc.drawTextCentered(l2, W / 2, Y_L2, Canvas::rgb(0x40C0FF));
     }
+    // ---- world clock ----
+    // The rows are worked out twice a second in the slow tick and everything that shows another zone reads this
+    // cache, rather than converting per frame. (zoneNow itself is now cheap -- see time_service.cpp -- but the
+    // formatting, the label and the day comparison are still work that only changes once a minute.)
+    struct WorldRow { char label[12]; char time[12]; int8_t day_delta; bool valid; };
+    WorldRow worldRows[MAX_WORLD_ZONES] = {};
+    uint8_t worldValidN = 0;
+
+    void refreshWorld(const struct tm& lt, bool timeValid) {
+      worldValidN = 0;
+      for (uint8_t i = 0; i < MAX_WORLD_ZONES; i++) {
+        WorldRow& r = worldRows[i];
+        const WorldZone& z = g_cfg.world.zones[i];
+        r.valid = false;
+        if (!z.posix[0]) continue;
+        struct tm zt;
+        if (!timesvc::zoneNow(z.posix, zt)) continue;      // false until the clock is actually set
+        fmtClock12(r.time, sizeof(r.time), zt.tm_hour * 60 + zt.tm_min);   // honours the 12/24-hour setting
+        // what the user typed, else the name of the zone they picked, else something rather than a blank row
+        const char* lbl = z.label[0] ? z.label : tz_label_for(z.id);
+        strlcpy(r.label, (lbl && *lbl) ? lbl : "ZONE", sizeof(r.label));
+        for (char* q = r.label; *q; q++) *q = (char)toupper((unsigned char)*q);
+        r.day_delta = 0;
+        if (timeValid) {                                    // the point of a world clock: "there" can be another day
+          const int64_t dz = days_from_civil(zt.tm_year + 1900, (unsigned)zt.tm_mon + 1, (unsigned)zt.tm_mday);
+          const int64_t dl = days_from_civil(lt.tm_year + 1900, (unsigned)lt.tm_mon + 1, (unsigned)lt.tm_mday);
+          r.day_delta = (int8_t)(dz > dl ? 1 : dz < dl ? -1 : 0);
+        }
+        r.valid = true;
+        worldValidN++;
+      }
+    }
+    bool worldReady() { return worldValidN > 0; }           // a configured zone is not a usable one until the clock is set
+
+    // The half-panel page in the rotation: one zone, where the full screen shows all four. It reads the same cache,
+    // and shows the first row that has something in it rather than insisting on row one.
     void drawWorldPage(Canvas& pc) {
       classicFont(pc);
-      struct tm z;
-      if (!timesvc::zoneNow(g_cfg.time.tz2_posix, z)) { pc.drawTextCentered("NO 2ND ZONE", W / 2, Y_SINGLE, C_GREY); return; }
-      char t[12];
-      fmtClock12(t, sizeof(t), z.tm_hour * 60 + z.tm_min);
-      const char* lbl = g_cfg.time.tz2_label[0] ? g_cfg.time.tz2_label : "ELSEWHERE";
-      pc.drawTextCentered(lbl, W / 2, Y_L1, colDate());
-      pc.drawTextCentered(t, W / 2, Y_L2, colText());
+      const WorldRow* r = nullptr;
+      for (uint8_t i = 0; i < MAX_WORLD_ZONES; i++) if (worldRows[i].valid) { r = &worldRows[i]; break; }
+      if (!r) { pc.drawTextCentered("NO ZONES SET", W / 2, Y_SINGLE, C_GREY); return; }
+      pc.drawTextCentered(r->label, W / 2, Y_L1, colDate());
+      pc.drawTextCentered(r->time, W / 2, Y_L2, colText());
     }
     // Whole days from today to the event, in local time. Yearly events roll to next year once they are past.
     int32_t eventDaysAway(const EventConfig& e, const struct tm& today) {
@@ -534,7 +577,7 @@ namespace renderer {
         case PAGE_UV: return wx.valid && wx.cur.uv >= 0;
         case PAGE_SKY: return wx.valid && (wx.cur.cloud >= 0 || wx.cur.vis >= 0);
         case PAGE_RAIN: return wx.valid && wx.ndaily;
-        case PAGE_WORLD: return g_cfg.time.tz2_posix[0] != '\0';
+        case PAGE_WORLD: return worldReady();
         case PAGE_EVENT: { struct tm lt; int32_t d; return timesvc::localNow(lt) && nextEvent(lt, d) >= 0; }
         default: return true;
       }
@@ -924,6 +967,53 @@ namespace renderer {
       c.drawText("12H", 0, 20, C_GREY);
       c.drawText("%", 0, 27, Canvas::color565(40, 90, 220));
     }
+    // four zones at once, small font: 3x5 ink in a 4x6 cell, so 16 characters across and four rows at pitch 8
+    void drawWorldScreen(Canvas& c) {
+      tinyFont(c);
+      constexpr uint8_t MAX_ROWS = H / 8;          // what fits, whatever MAX_WORLD_ZONES becomes
+      uint8_t row = 0;
+      for (uint8_t i = 0; i < MAX_WORLD_ZONES && row < MAX_ROWS; i++) {
+        const WorldRow& r = worldRows[i];
+        if (!r.valid) continue;
+        const int16_t y = (int16_t)(row * 8);
+        char right[16];
+        if (r.day_delta) snprintf(right, sizeof(right), "%s%+d", r.time, (int)r.day_delta);
+        else strlcpy(right, r.time, sizeof(right));
+        c.drawTextRight(right, W - 1, y, colText());
+        char lb[sizeof(r.label)];
+        strlcpy(lb, r.label, sizeof(lb));
+        const int16_t avail = (int16_t)(W - 1 - c.textWidth(right) - 3);
+        while (lb[0] && c.textWidth(lb) > avail) lb[strlen(lb) - 1] = '\0';   // a long name shortens, it never collides
+        if (lb[0]) c.drawText(lb, 1, y, colDate());
+        row++;
+      }
+      if (!row) c.drawTextCentered("NO ZONES SET", W / 2, 13, C_GREY);
+    }
+
+    // One predicate and one switch, used by both places that hand the panel to a full screen. They used to be a
+    // hand-copied condition and ternary chain each, which is how a new screen ends up rendering as a radar loop.
+    bool isFullScreen(Screen s) {
+      return s == Screen::Forecast || s == Screen::Hourly || s == Screen::Radar || s == Screen::World;
+    }
+    void drawFullScreen(Canvas& c, uint32_t now) {
+      switch (screen) {
+        case Screen::Forecast: drawForecast(c); break;
+        case Screen::Hourly: drawHourly(c); break;
+        case Screen::Radar: drawRadar(c, now); break;
+        case Screen::World: drawWorldScreen(c); break;
+        default: break;      // unreachable: isFullScreen() is the only gate. Draws nothing rather than guessing.
+      }
+    }
+    // The radar runs its own timer (startRadar); everything else lands here. The world clock is timed by its own
+    // setting, the weather screens by twice the page interval, as they always were.
+    void startFullScreen(Screen s, uint32_t now) {
+      screen = s;
+      const uint32_t secs = (s == Screen::World && g_cfg.world.show_sec) ? g_cfg.world.show_sec
+                                                                        : 2UL * g_cfg.display.page_sec;
+      screenUntil = now + secs * 1000UL;
+      transFrom = 255;
+    }
+
     void drawSplash(Canvas& c) {
       classicFont(c);
       c.drawTextCentered("MATRIX", W / 2, 3, 0x07FF);
@@ -1007,19 +1097,29 @@ namespace renderer {
   bool requestFullScreen(const char* name) {
     if (otaActive) return false;
     if (!strcmp(name, "radar")) { if (!radarAvailable()) return false; startRadar(millis()); return true; }
-    if (!wx.valid) return false;
+    if (!strcmp(name, "world")) {
+      if (!worldReady()) {                                   // just saved, or the clock has only just been set
+        struct tm lt = {};
+        const bool tv = timesvc::localNow(lt);
+        refreshWorld(lt, tv);
+      }
+      if (!worldReady()) return false;
+      startFullScreen(Screen::World, millis());
+      return true;
+    }
+    if (!wx.valid) return false;                           // everything below this line needs weather; the world clock does not
     if (!strcmp(name, "forecast") && wx.ndaily) screen = Screen::Forecast;
     else if (!strcmp(name, "hourly") && wx.nhourly >= 2) screen = Screen::Hourly;
     else return false;
-    screenUntil = millis() + 2UL * g_cfg.display.page_sec * 1000UL;
-    transFrom = 255;
+    startFullScreen(screen, millis());
     return true;
   }
 
   const char* fullScreenBlockReason() {
     const DisplayConfig& d = g_cfg.display;
-    if (!d.forecast_page && !d.hourly_page && !g_cfg.radar.enabled) return "all full screens disabled";
-    if (!wx.valid) return "no weather data yet";
+    const bool worldOk = g_cfg.world.enabled && worldReady();
+    if (!d.forecast_page && !d.hourly_page && !g_cfg.radar.enabled && !worldOk) return "all full screens disabled";
+    if (!wx.valid && !worldOk) return "no weather data yet";
     if (alarmclock::ringing()) return "alarm ringing";
     if (msg.active) return "message showing";
     if (alarmclock::timerRunning()) return "timer running";
@@ -1105,6 +1205,7 @@ namespace renderer {
       case Screen::Forecast: return "forecast";
       case Screen::Hourly: return "hourly";
       case Screen::Radar: return "radar";
+      case Screen::World: return "world";
       case Screen::Test: return "test";
       default: return demo.on ? "demo" : alarmclock::ringing() ? "alarm" : av.n ? "alert" : msg.active ? "message" : "clock";
     }
@@ -1115,8 +1216,10 @@ namespace renderer {
       if ((int32_t)(now - demo.endAt) >= 0) setDemo(false, 0);
       else if ((int32_t)(now - demo.nextAt) >= 0) { demoApply((uint8_t)((demo.idx + 1) % DEMO_COUNT), now); demo.nextAt = now + DEMO_STEP_MS; }
     }
+    bool slowTick = false;
     if (now - lastSlow >= 500) {
       lastSlow = now;
+      slowTick = true;
       shared::getWeather(wx);
       alerts::view(g_cfg.alerts, av);
       ls = lightning::status();
@@ -1131,6 +1234,7 @@ namespace renderer {
     struct tm lt = {};
     uint16_t ms = 0;
     const bool timeValid = timesvc::localNow(lt, &ms);
+    if (slowTick) refreshWorld(lt, timeValid);
     theme = demo.on ? demo.theme : ((timeValid && g_cfg.display.holiday_themes) ? themes::forDate(lt) : nullptr);
 
     uint8_t bri = decideBrightness(lt, timeValid);
@@ -1161,10 +1265,10 @@ namespace renderer {
     const bool alertFresh = alert && av.newest_ms && g_cfg.alerts.flash_frame_sec && now - av.newest_ms < (uint32_t)g_cfg.alerts.flash_frame_sec * 1000UL;
     const bool interrupt = ringing || alertFresh || msg.active || timerRun;   // blocks the full screens
 
-    // an active full screen (forecast / hourly graph) owns the panel until its time is up
-    if (screen == Screen::Forecast || screen == Screen::Hourly || screen == Screen::Radar) {
+    // an active full screen (forecast / hourly graph / radar / world clock) owns the panel until its time is up
+    if (isFullScreen(screen)) {
       if ((int32_t)(now - screenUntil) < 0 && !interrupt) {
-        if (screen == Screen::Forecast) drawForecast(c); else if (screen == Screen::Hourly) drawHourly(c); else drawRadar(c, now);
+        drawFullScreen(c, now);
         return;
       }
       screen = Screen::Composite;
@@ -1190,6 +1294,7 @@ namespace renderer {
             pageIdx = 0;
             cyclesSinceFull++;
             cyclesSinceRadar++;
+            cyclesSinceWorld++;
             const bool radarOk = !interrupt && !night && radarAvailable();
             const bool precip = radarOk && g_cfg.radar.show_when_precip && (radar::echoNearby() || (wx.valid && isPrecipCode(wx.cur.wmo)));
             if (precip && cyclesSinceRadar >= g_cfg.radar.precip_every_n_cycles) {
@@ -1198,24 +1303,26 @@ namespace renderer {
               startRadar(now);
             } else if (!interrupt && !night && cyclesSinceFull >= d.forecast_every_n_cycles) {
               // round-robin over the enabled full screens: forecast, hourly graph, radar
-              Screen cand[3]; uint8_t nc = 0;
-              if (d.forecast_page && wx.valid && wx.ndaily) cand[nc++] = Screen::Forecast;
-              if (d.hourly_page && wx.valid && wx.nhourly >= 2) cand[nc++] = Screen::Hourly;
-              if (radarOk && !precip && g_cfg.radar.every_n_cycles && (cyclesSinceRadar + 1) >= g_cfg.radar.every_n_cycles / max<uint8_t>(1, d.forecast_every_n_cycles)) cand[nc++] = Screen::Radar;
+              constexpr uint8_t MAX_FULL_CAND = 4;    // forecast, hourly, radar, world -- keep in step with the pushes
+              Screen cand[MAX_FULL_CAND]; uint8_t nc = 0;
+              if (d.forecast_page && wx.valid && wx.ndaily && nc < MAX_FULL_CAND) cand[nc++] = Screen::Forecast;
+              if (d.hourly_page && wx.valid && wx.nhourly >= 2 && nc < MAX_FULL_CAND) cand[nc++] = Screen::Hourly;
+              if (radarOk && !precip && g_cfg.radar.every_n_cycles && (cyclesSinceRadar + 1) >= g_cfg.radar.every_n_cycles / max<uint8_t>(1, d.forecast_every_n_cycles) && nc < MAX_FULL_CAND) cand[nc++] = Screen::Radar;
+              if (g_cfg.world.enabled && worldReady() && cyclesSinceWorld >= g_cfg.world.every_n_cycles && nc < MAX_FULL_CAND) cand[nc++] = Screen::World;
               if (nc) {
                 cyclesSinceFull = 0;
                 Screen pick = cand[fullTurn % nc];
                 fullTurn++;
                 if (pick == Screen::Radar) { cyclesSinceRadar = 0; startRadar(now); }
-                else { screen = pick; screenUntil = now + 2UL * d.page_sec * 1000UL; transFrom = 255; }
+                else { if (pick == Screen::World) cyclesSinceWorld = 0; startFullScreen(pick, now); }
               }
             }
           }
         }
       }
     }
-    if (screen == Screen::Forecast || screen == Screen::Hourly || screen == Screen::Radar) {   // just switched to a full screen this tick
-      if (screen == Screen::Forecast) drawForecast(c); else if (screen == Screen::Hourly) drawHourly(c); else drawRadar(c, now);
+    if (isFullScreen(screen)) {   // just switched to a full screen this tick
+      drawFullScreen(c, now);
       return;
     }
 

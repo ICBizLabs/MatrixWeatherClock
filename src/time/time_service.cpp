@@ -1,4 +1,5 @@
 #include "time_service.h"
+#include "posix_tz.h"
 #include <sys/time.h>
 #include <esp_sntp.h>
 #include <freertos/FreeRTOS.h>
@@ -63,21 +64,15 @@ namespace timesvc {
   void tzLock() { if (tzMtx) xSemaphoreTakeRecursive(tzMtx, pdMS_TO_TICKS(250)); }
   void tzUnlock() { if (tzMtx) xSemaphoreGiveRecursive(tzMtx); }
 
+  // Works the rule out arithmetically rather than borrowing the process timezone. The old way -- setenv, tzset,
+  // localtime_r, then put it all back -- needed the lock and leaked about 50 bytes a call on this newlib: with four
+  // world-clock rows refreshed twice a second that was 24 KB a minute, measured on the device, which exhausted the
+  // internal heap and panicked the renderer after about four minutes. posix_tz touches no global state at all.
   bool zoneNow(const char* posix, struct tm& out) {
     if (!posix || !*posix) return false;
-    time_t now = time(nullptr);
-    if (now < 1700000000) return false;
-    char saved[80];
-    tzLock();
-    const char* cur = getenv("TZ");
-    strlcpy(saved, cur ? cur : "UTC0", sizeof(saved));
-    setenv("TZ", posix, 1);
-    tzset();
-    localtime_r(&now, &out);
-    setenv("TZ", saved, 1);
-    tzset();
-    tzUnlock();
-    return true;
+    const time_t now = time(nullptr);
+    if (now < 1700000000) return false;                   // the clock is not set yet, so there is nothing to show
+    return posix_tz::zone_tm(posix, (int64_t)now, out);
   }
 
   bool valid() { return time(nullptr) > 1700000000; }

@@ -200,9 +200,22 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, Stri
       else { err = "time.date_order: mdy, dmy or iso"; return false; }
       t = true;
     }
-    if (!getStr(o, "tz2_id", c.time.tz2_id, t, err)) return false;
-    if (!getStr(o, "tz2_posix", c.time.tz2_posix, t, err)) return false;
-    if (!getStr(o, "tz2_label", c.time.tz2_label, t, err)) return false;
+    // Legacy: the one "second time zone" became the first row of the world clock in 0.16.0. These keys are still
+    // accepted so an existing config.json keeps working, and are no longer written, so it upgrades on the first save.
+    {
+      char lid[40] = "", lposix[64] = "", llabel[12] = "";
+      bool lt = false;
+      if (!getStr(o, "tz2_id", lid, lt, err)) return false;
+      if (!getStr(o, "tz2_posix", lposix, lt, err)) return false;
+      if (!getStr(o, "tz2_label", llabel, lt, err)) return false;
+      WorldZone& z0 = c.world.zones[0];
+      if (lt && z0.id[0] == '\0' && z0.posix[0] == '\0') {
+        strlcpy(z0.id, lid, sizeof(z0.id));
+        strlcpy(z0.posix, lposix, sizeof(z0.posix));
+        strlcpy(z0.label, llabel, sizeof(z0.label));
+        changed |= CHG_WORLD;
+      }
+    }
     if (t) changed |= CHG_TIME;
   }
 
@@ -618,6 +631,34 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, Stri
     changed |= CHG_EVENT;
   }
 
+  JsonVariantConst wo = src["world"];
+  if (!wo.isNull()) {
+    t = false;
+    JsonObjectConst w = wo.as<JsonObjectConst>();
+    if (w.isNull()) { err = "world: expected an object"; return false; }
+    if (!getBool(w, "enabled", c.world.enabled, t, err)) return false;
+    if (!getNum(w, "every_n_cycles", c.world.every_n_cycles, t, err, 1, 60)) return false;
+    if (!getNum(w, "show_sec", c.world.show_sec, t, err, 3, 60)) return false;
+    JsonVariantConst zs = w["zones"];
+    if (!zs.isNull()) {
+      if (!zs.is<JsonArrayConst>()) { err = "world.zones: expected an array"; return false; }
+      uint8_t n = 0;
+      for (JsonObjectConst e : zs.as<JsonArrayConst>()) {
+        if (n >= MAX_WORLD_ZONES) break;
+        WorldZone& x = c.world.zones[n];
+        x = WorldZone();
+        bool tt = false;
+        if (!getStr(e, "id", x.id, tt, err)) return false;
+        if (!getStr(e, "posix", x.posix, tt, err)) return false;
+        if (!getStr(e, "label", x.label, tt, err)) return false;
+        n++;
+      }
+      for (uint8_t i = n; i < MAX_WORLD_ZONES; i++) c.world.zones[i] = WorldZone();
+      t = true;
+    }
+    if (t) changed |= CHG_WORLD;
+  }
+
   JsonVariantConst al = src["alarms"];
   if (!al.isNull()) {
     if (!al.is<JsonArrayConst>()) { err = "alarms: expected an array"; return false; }
@@ -680,9 +721,6 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["use_24h"] = c.time.use_24h;
   o["show_seconds"] = c.time.show_seconds;
   o["date_order"] = c.time.date_order == 1 ? "dmy" : c.time.date_order == 2 ? "iso" : "mdy";
-  o["tz2_id"] = c.time.tz2_id;
-  o["tz2_posix"] = c.time.tz2_posix;
-  o["tz2_label"] = c.time.tz2_label;
 
   o = dst["weather"].to<JsonObject>();
   o["enabled"] = c.weather.enabled;
@@ -919,6 +957,21 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
       e["year"] = x.year;
       e["month"] = x.month;
       e["day"] = x.day;
+    }
+  }
+
+  {
+    JsonObject w = dst["world"].to<JsonObject>();
+    w["enabled"] = c.world.enabled;
+    w["every_n_cycles"] = c.world.every_n_cycles;
+    w["show_sec"] = c.world.show_sec;
+    JsonArray zs = w["zones"].to<JsonArray>();
+    for (uint8_t i = 0; i < MAX_WORLD_ZONES; i++) {
+      const WorldZone& x = c.world.zones[i];
+      JsonObject e = zs.add<JsonObject>();
+      e["id"] = x.id;
+      e["posix"] = x.posix;
+      e["label"] = x.label;
     }
   }
 

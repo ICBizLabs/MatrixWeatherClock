@@ -349,12 +349,50 @@ namespace web {
         o["id"] = page_name(i);
         o["label"] = page_label(i);
       }
-      JsonArray tz = root["tz_options"].to<JsonArray>();
-      for (size_t i = 0; i < TZ_TABLE_LEN; i++) {
+      JsonArray tz = root["tz_options"].to<JsonArray>();     // short list only; the full table is /api/timezones
+      for (size_t i = 0; i < TZ_COMMON_LEN && i < TZ_TABLE_LEN; i++) {
         JsonObject o = tz.add<JsonObject>();
         o["id"] = TZ_TABLE[i].id; o["label"] = TZ_TABLE[i].label; o["posix"] = TZ_TABLE[i].posix;
       }
       res->setLength();
+      r->send(res);
+    }
+
+    // The whole zone table, fetched once by the settings page. Deliberately not part of /api/config, and
+    // deliberately not built as a JsonDocument either: ArduinoJson copies every string, so the 5 KB of text cost
+    // about 40 KB of internal heap and did not hand it straight back. The list is generated a chunk at a time
+    // instead, out of flash, with one small buffer on the stack and nothing retained.
+    size_t tzPiece(size_t i, char* out, size_t n) {
+      const int w = (i >= TZ_TABLE_LEN)
+        ? snprintf(out, n, "]")
+        : snprintf(out, n, "%s{\"id\":\"%s\",\"label\":\"%s\",\"posix\":\"%s\"}",
+                   i ? "," : "[", TZ_TABLE[i].id, TZ_TABLE[i].label, TZ_TABLE[i].posix);
+      // snprintf reports the length it wanted, which can exceed the buffer. The longest entry in the table today is
+      // 88 bytes against a 176-byte buffer, but clamping means a longer one added later truncates the JSON rather
+      // than walking the caller off the end of it.
+      if (w < 0) return 0;
+      return (size_t)w >= n ? n - 1 : (size_t)w;
+    }
+    void handleTimezones(AsyncWebServerRequest* r) {
+      AsyncWebServerResponse* res = r->beginChunkedResponse("application/json",
+        [](uint8_t* buf, size_t maxLen, size_t index) -> size_t {
+          size_t written = 0, pos = 0;
+          for (size_t i = 0; i <= TZ_TABLE_LEN && written < maxLen; i++) {
+            char piece[176];
+            const size_t len = tzPiece(i, piece, sizeof(piece));
+            const size_t want = index + written;          // absolute offset of the next byte owed
+            if (pos + len > want) {
+              const size_t off = want - pos;
+              size_t take = len - off;
+              if (take > maxLen - written) take = maxLen - written;
+              memcpy(buf + written, piece + off, take);
+              written += take;
+            }
+            pos += len;
+          }
+          return written;                                  // 0 ends the response
+        });
+      res->addHeader("Cache-Control", "max-age=86400");     // the table only changes with the firmware
       r->send(res);
     }
 
@@ -371,9 +409,26 @@ namespace web {
         const char* posix = tz_posix_for(tj["tz_id"].as<const char*>());
         if (posix) strlcpy(next.time.tz_posix, posix, sizeof(next.time.tz_posix));
       }
-      if (!tj.isNull() && tj["tz2_id"].is<const char*>() && !tj["tz2_posix"].is<const char*>()) {
-        const char* p2 = tz_posix_for(tj["tz2_id"].as<const char*>());
-        strlcpy(next.time.tz2_posix, p2 ? p2 : "", sizeof(next.time.tz2_posix));
+      // same courtesy for the world clock: a zone id alone is enough, the table fills in the rule and the label
+      JsonVariantConst wj = json.as<JsonObjectConst>()["world"];
+      if (!wj.isNull()) {
+        JsonArrayConst zs = wj["zones"];
+        if (!zs.isNull()) {
+          uint8_t i = 0;
+          for (JsonObjectConst e : zs) {
+            if (i >= MAX_WORLD_ZONES) break;
+            WorldZone& z = next.world.zones[i];
+            if (e["id"].is<const char*>() && !e["posix"].is<const char*>()) {
+              const char* pz = tz_posix_for(e["id"].as<const char*>());
+              strlcpy(z.posix, pz ? pz : "", sizeof(z.posix));
+            }
+            if (z.label[0] == '\0' && z.id[0]) {
+              const char* lz = tz_label_for(z.id);
+              if (lz) strlcpy(z.label, lz, sizeof(z.label));
+            }
+            i++;
+          }
+        }
       }
       if ((changed & CHG_ALERTS) && next.alerts.enabled && next.alerts.user_agent_contact[0] == '\0') { sendJsonError(r, 400, "alerts.user_agent_contact: NWS requires a contact (e-mail or URL)"); return; }
       app::stageConfig(next, changed);
@@ -386,7 +441,7 @@ namespace web {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
         { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false }, { CHG_REMOTE, "remote", false }, { CHG_TIDE, "tide", false },
         { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false },
-        { CHG_WEBHOOK, "webhook", false }, { CHG_EVENT, "events", false } };
+        { CHG_WEBHOOK, "webhook", false }, { CHG_EVENT, "events", false }, { CHG_WORLD, "world", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
       r->send(res);
@@ -541,6 +596,7 @@ namespace web {
   void registerApi(AsyncWebServer& server) {
     server.on("/api/status", HTTP_GET, handleStatus);
     server.on("/api/config", HTTP_GET, handleConfigGet);
+    server.on("/api/timezones", HTTP_GET, handleTimezones);
     server.on("/api/weather", HTTP_GET, handleWeather);
     server.on("/api/alerts", HTTP_GET, handleAlerts);
     server.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
@@ -698,7 +754,7 @@ namespace web {
       app::trace("web", "show");
       String which = r->hasParam("screen", true) ? r->getParam("screen", true)->value() : (r->hasParam("screen") ? r->getParam("screen")->value() : "forecast");
       if (renderer::requestFullScreen(which.c_str())) r->send(200, "application/json", "{\"ok\":true}");
-      else sendJsonError(r, 409, "screen not available (no weather data yet?)");
+      else sendJsonError(r, 409, "screen not available (not set up, or no data yet)");
     });
     server.on("/api/test/push", HTTP_POST, [](AsyncWebServerRequest* r) {
       if (pushbullet::notify("Matrix Weather Clock", "Test notification from your clock")) r->send(200, "application/json", "{\"ok\":true}");
