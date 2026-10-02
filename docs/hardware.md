@@ -3,7 +3,7 @@
 ## Controller: Seengreat RGB Matrix HUB75 S3 (SKU 260612)
 
 ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM), native USB-C (device id 303A:1001), second USB-C and a
-VH-4P screw terminal for panel power (5 V / 4 A max). Wiki: https://seengreat.com/wiki/214/rgb-matrix-hub75-s3
+VH-4P screw terminal for panel power (5 V / 4 A max). Wiki: https://seengreat.com/wiki/214/rgb-matrix-hub75-s3 Module datasheet: [ESP32-S3-N16R8.pdf](ESP32-S3-N16R8.pdf)
 
 | Function | GPIO | Function | GPIO |
 |---|---|---|---|
