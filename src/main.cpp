@@ -38,6 +38,7 @@
 #include "web/web_server.h"
 
 static Canvas canvas(layout::W, layout::H);
+static Canvas* lower = nullptr;                    // square LCD: second 64x32 area under the clock
 static uint32_t lastFrame = 0, lastSecond = 0;
 static constexpr uint32_t FRAME_MS = 33;
 static constexpr uint32_t BOOT_OK_AFTER_MS = 30000;
@@ -120,6 +121,7 @@ void setup() {
   else LOGI("panel ok: %s @ %d Hz", panel::driverName(), panel::refreshRateHz());
   frame_snapshot::begin(layout::W, layout::H);
   renderer::begin(millis());
+  if (panel::stacked()) { lower = new Canvas(layout::W, layout::H); renderer::enableLower(); }
   if (g_cfg.first_boot) renderer::requestTest(10000);
   alarmclock::begin();
 
@@ -237,7 +239,8 @@ void loop() {
   if (now - lastFrame >= FRAME_MS) {
     lastFrame = now;
     renderer::tick(canvas, now);
-    panel::present(canvas);
+    if (lower) { renderer::tickLower(*lower, now); panel::presentStacked(canvas, *lower); }
+    else panel::present(canvas);
     frame_snapshot::update(canvas.getBuffer());
   } else {
     delay(1);

@@ -8,6 +8,10 @@ namespace renderer {
   void begin(uint32_t now_ms);
   void applyDisplay();                        // after a display config change
   void tick(Canvas& c, uint32_t now_ms);      // draws one frame and keeps panel brightness up to date
+  // Square LCD: a second 64x32 area under the clock. Once enabled, the forecast, hourly graph, world clock and radar
+  // cycle there instead of replacing the clock. Call tickLower() right after tick() with its own canvas.
+  void enableLower();
+  void tickLower(Canvas& c, uint32_t now_ms);
   void requestTest(uint32_t hold_ms);
   bool requestFullScreen(const char* name);   // "forecast", "hourly" (two page periods) or "radar" (radar.show_sec)
   const char* fullScreenBlockReason();        // "" when the periodic full screens can appear, else why not

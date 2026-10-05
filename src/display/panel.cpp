@@ -128,5 +128,7 @@ namespace panel {
   const char* driverName() { return panel_driver_name(driverIdx); }
 
   void setRotation(uint8_t) {}
+  void presentStacked(const Canvas& top, const Canvas&) { present(top); }
+  bool stacked() { return false; }
 }
 #endif

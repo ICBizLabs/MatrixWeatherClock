@@ -1,8 +1,9 @@
 // 480x480 ST7701S LCD backend (Guition ESP32-4848S040). Implements the panel:: interface from panel.h.
 //
-// The clock still renders into its 64x32 canvas. Each canvas pixel becomes a 7x7 cell on the LCD: a 6x6 dot with
-// its corners trimmed and a one-pixel gap, so the screen keeps the look of an LED matrix. The 448x224 image sits
-// in the middle of the panel and can be turned in quarter steps (panel.rotation).
+// The clock renders into 64x32 canvases. The LCD stacks two of them, the clock on top and the full screens
+// (forecast, hourly graph, world clock, radar) below, into a 64x64 picture. Each canvas pixel becomes a 7x7 cell:
+// a 6x6 dot with its corners trimmed and a one-pixel gap, so the screen keeps the look of an LED matrix. The
+// 448x448 image sits in the middle of the panel and can be turned in quarter steps (panel.rotation).
 //
 // The ST7701S is configured once over a bit-banged 3-wire SPI link (9-bit words: D/C bit, then 8 data bits),
 // then fed continuously over the ESP32-S3 RGB interface from a PSRAM frame buffer through DRAM bounce buffers.
@@ -206,7 +207,7 @@ namespace panel {
     memset(fb, 0, LCD_W * LCD_H * sizeof(uint16_t));
 
     frameW = layout::W;                        // the HUB75 size settings do not apply: the clock layout is fixed
-    frameH = layout::H;
+    frameH = layout::H * 2;                    // top: clock, bottom: full screens
     prevFrame = (uint16_t*)heap_caps_malloc(frameW * frameH * sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (!prevFrame) { LOGE("lcd: no memory for frame copy"); return false; }
     memset(prevFrame, 0, frameW * frameH * sizeof(uint16_t));
@@ -240,25 +241,45 @@ namespace panel {
     LOGI("lcd: rotation %u", rot * 90);
   }
 
-  void present(const Canvas& c, bool force) {
-    if (!isValid) return;
-    const uint16_t* buf = c.getBuffer();
-    const int16_t w = min<int16_t>(c.width(), frameW);
-    const int16_t h = min<int16_t>(c.height(), frameH);
-    force = force || fullFrame;
-    fullFrame = false;
-    for (int16_t y = 0; y < h; y++) {
-      const uint16_t* row = buf + y * c.width();
-      uint16_t* prow = prevFrame + y * frameW;
-      for (int16_t x = 0; x < w; x++) {
-        const uint16_t v = row[x];
-        if (!force && v == prow[x]) continue;
-        prow[x] = v;
-        drawCell(x, y, v);
+  namespace {
+    // diff one 64x32 canvas into rows y0.. of the stacked picture; nullptr paints that half black
+    void presentHalf(const Canvas* c, int16_t y0, bool force) {
+      const int16_t hh = layout::H;
+      for (int16_t y = 0; y < hh && y0 + y < frameH; y++) {
+        const uint16_t* row = c && y < c->height() ? c->getBuffer() + y * c->width() : nullptr;
+        uint16_t* prow = prevFrame + (y0 + y) * frameW;
+        for (int16_t x = 0; x < frameW; x++) {
+          const uint16_t v = row && x < c->width() ? row[x] : 0;
+          if (!force && v == prow[x]) continue;
+          prow[x] = v;
+          drawCell(x, y0 + y, v);
+        }
       }
     }
-    if (!backlightOn) { backlightOn = true; backlight(curBri); }
+    void finishFrame() {
+      if (!backlightOn) { backlightOn = true; backlight(curBri); }
+    }
   }
+
+  void present(const Canvas& c, bool force) {
+    if (!isValid) return;
+    force = force || fullFrame;
+    fullFrame = false;
+    presentHalf(&c, 0, force);
+    presentHalf(nullptr, layout::H, force);
+    finishFrame();
+  }
+
+  void presentStacked(const Canvas& top, const Canvas& bottom) {
+    if (!isValid) return;
+    const bool force = fullFrame;
+    fullFrame = false;
+    presentHalf(&top, 0, force);
+    presentHalf(&bottom, layout::H, force);
+    finishFrame();
+  }
+
+  bool stacked() { return isValid; }
 
   int refreshRateHz() {
     if (!isValid) return 0;

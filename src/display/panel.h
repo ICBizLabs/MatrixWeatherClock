@@ -14,6 +14,9 @@ namespace panel {
   void setLatchBlanking(uint8_t n);        // live adjustable (HUB75)
   void setRotation(uint8_t quarterTurns);  // live adjustable (LCD); HUB75 ignores it
   void present(const Canvas& c, bool force = false);   // pushes changed pixels only (or everything when force / double buffer)
+  // Two canvases stacked into one square picture (LCD). HUB75 shows only the top one.
+  void presentStacked(const Canvas& top, const Canvas& bottom);
+  bool stacked();                          // true when the panel shows a lower half (presentStacked is worth calling)
   int refreshRateHz();
   const char* driverName();
 }

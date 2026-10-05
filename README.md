@@ -5,10 +5,15 @@ emergency weather alerts. Runs on the Seengreat **RGB Matrix HUB75 S3** controll
 Open-Meteo and alerts from api.weather.gov, plays a chime through the board's speaker output when a new alert
 arrives, and is configured entirely through its own web interface.
 
+It also runs on the **Guition ESP32-4848S040**, a 4-inch 480x480 touch LCD with an ESP32-S3. There the screen shows
+a 64x64 LED-style dot matrix: the clock and its pages on top, and the forecast, hourly graph, world clock and radar
+taking turns underneath. See [4-inch LCD board](#4-inch-lcd-board).
+
 > Status: running on real hardware (the controller and panel listed below). The panel driver, WiFi setup, weather,
 > NWS alerts, web interface, OTA and self-update are in daily use. The alert chime, thumb-wheel keys, lightning feed
 > and Pushbullet have been built but not yet confirmed on hardware; reports welcome. Other 64x32 panels may need the
-> driver settings in [Troubleshooting](#troubleshooting).
+> driver settings in [Troubleshooting](#troubleshooting). The 4-inch LCD board runs the display, touch, WiFi, weather
+> and web interface on real hardware.
 
 ## Features
 
@@ -84,9 +89,22 @@ arrives, and is configured entirely through its own web interface.
 | Speaker (optional) | 4-8 ohm on the board's speaker connector, needed for the chime |
 | CR1220 / LIR battery (optional) | On the SH1.0 connector to keep the RTC running without power |
 
-The firmware also runs on the **Guition ESP32-4848S040** 4-inch 480x480 touch LCD (build `guition_lcd4848`). It draws
-the same 64x32 clock as LED-style dots and uses the touch panel as a key; that board has no speaker or RTC. See
-[docs/hardware.md](docs/hardware.md) for pins and flashing.
+### 4-inch LCD board
+
+The same firmware runs on the **Guition ESP32-4848S040**, an all-in-one board with an ESP32-S3 (16 MB flash, 8 MB
+PSRAM), a 4-inch 480x480 IPS screen and capacitive touch. It needs no panel, power supply or wiring: plug in USB-C
+and flash it. Build it with `pio run -e guition_lcd4848`.
+
+| On the LCD board | What happens |
+|---|---|
+| Screen | A 64x64 matrix of round-cornered dots fills the screen, so it keeps the LED look. The top half is the usual clock with its rotating pages, alerts, alarms and themes. The bottom half cycles the 3-day forecast, the 12-hour graph, the world clock and the radar loop, and brings the radar forward when rain or snow is near. On the HUB75 matrix those screens still replace the clock for a while, as before |
+| Rotation | **Panel > LCD rotation** turns the picture in 90-degree steps and applies at once |
+| Brightness | Drives the backlight, with a floor so the night level stays readable |
+| Touch | Tap for the next page or to snooze an alarm. Hold for 1.5 s to stop an alarm, clear a message or acknowledge alerts |
+| Not available | No speaker (no chime or spoken announcements), no battery-backed clock (time comes from the internet), no thumb-wheel keys. The IR receiver is off by default because its usual pin is the board's console line |
+| Updates | Browser uploads work with `.pio/build/guition_lcd4848/firmware.bin`. Automatic updates only install an image published for this board, never the HUB75 one |
+
+Pins, timings and flashing details are in [docs/hardware.md](docs/hardware.md).
 
 **Where the parts came from**
 

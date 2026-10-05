@@ -66,8 +66,10 @@ ESP32-S3 with 16 MB quad flash and 8 MB in-package octal PSRAM, a 480x480 IPS pa
 16-bit RGB interface, GT911 capacitive touch, and a CH340 USB-serial chip on UART0. It has no audio codec, RTC,
 key expander or speaker, so the clock runs without sound and takes its time from NTP only.
 
-The clock keeps its 64x32 layout. Each clock pixel is drawn as a 6x6 dot in a 7-pixel cell, so the picture is
-448x224 on the panel and still looks like an LED matrix. **Panel > LCD rotation** turns it in quarter steps and
+The screen is a 64x64 dot matrix made of two 64x32 areas. The top one is the usual clock, rendered exactly as on
+the HUB75 panel. The bottom one cycles the forecast, hourly graph, world clock and radar, so on this board those
+screens never replace the clock. Each pixel is drawn as a 6x6 dot in a 7-pixel cell, so the picture is 448x448 and
+still looks like an LED matrix. The web preview shows the top half only. **Panel > LCD rotation** turns it in quarter steps and
 applies at once. The default is 90 degrees, taken from the Arduino_GFX definition for the 86-box version; change it
 if the picture comes out sideways. The HUB75 settings on that card do
 nothing on this board.

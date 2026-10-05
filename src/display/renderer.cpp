@@ -55,6 +55,12 @@ namespace renderer {
     // page cycles since each full screen last had its turn, so each can be spaced out on its own terms
     uint8_t cyclesSinceFull = 0, cyclesSinceRadar = 0, cyclesSinceWorld = 0;
     uint8_t fullTurn = 0;                       // round-robin over the enabled full screens
+    // Lower half (square LCD only): a second 64x32 area under the clock that cycles the full screens, so they no
+    // longer have to take the clock's place.
+    bool lowerOn = false;
+    Screen lowerScreen = Screen::Composite;     // Composite = nothing shown yet
+    uint32_t lowerUntil = 0;
+    uint8_t lowerTurn = 0;
     uint16_t* radarFrame = nullptr;             // PSRAM, W*H pixels (allocated in begin)
     uint8_t* radarBase = nullptr;               // PSRAM, W*H mask bytes
     constexpr size_t RADAR_PX = (size_t)radar::W * radar::H;
@@ -875,10 +881,13 @@ namespace renderer {
     }
     bool isPrecipCode(uint8_t c) { return (c >= 51 && c <= 67) || (c >= 71 && c <= 77) || (c >= 80 && c <= 86) || c >= 95; }
     bool radarAvailable() { return demo.on ? demoRadar != nullptr : (g_cfg.radar.enabled && radar::frameCount() > 0); }
-    void startRadar(uint32_t now) {
-      screen = Screen::Radar;
+    void resetRadarLoop(uint32_t now) {
       radarIdx = 0; radarLoaded = false; radarNextAt = now;
       radarBaseOk = radarBase && g_cfg.radar.base_map && radar::copyBase(radarBase);
+    }
+    void startRadar(uint32_t now) {
+      screen = Screen::Radar;
+      resetRadarLoop(now);
       screenUntil = now + (uint32_t)g_cfg.radar.show_sec * 1000UL;
       transFrom = 255;
     }
@@ -1096,6 +1105,52 @@ namespace renderer {
     for (uint8_t i = 0; i < NP; i++) respawn(parts[i], true);
   }
 
+  void enableLower() { lowerOn = true; }
+
+  void tickLower(Canvas& c, uint32_t now) {
+    c.fillScreen(0);
+    if (!lowerOn) return;
+    // follow whatever owns the top: nothing below a splash, test pattern or update, or when night hides the bottom
+    if (otaActive || screen == Screen::Test || screen == Screen::Splash) return;
+    if (night && g_cfg.display.night.hide_bottom) return;
+    const DisplayConfig& d = g_cfg.display;
+    auto usable = [&](Screen s) {
+      switch (s) {
+        case Screen::Forecast: return d.forecast_page && wx.valid && wx.ndaily > 0;
+        case Screen::Hourly:   return d.hourly_page && wx.valid && wx.nhourly >= 2;
+        case Screen::World:    return g_cfg.world.enabled && worldReady();
+        case Screen::Radar:    return screen != Screen::Radar && !night && radarAvailable();   // one radar loop at a time
+        default:               return false;
+      }
+    };
+    const bool expired = lowerScreen == Screen::Composite || (int32_t)(now - lowerUntil) >= 0 || !usable(lowerScreen);
+    if (expired) {
+      // round-robin; with rain or snow about, the radar comes back every other turn
+      const bool precip = usable(Screen::Radar) && (radar::echoNearby() || (wx.valid && isPrecipCode(wx.cur.wmo)));
+      const Screen order[4] = { Screen::Forecast, Screen::Hourly, Screen::World, Screen::Radar };
+      Screen pick = Screen::Composite;
+      if (precip && lowerScreen != Screen::Radar && g_cfg.radar.show_when_precip) pick = Screen::Radar;
+      for (uint8_t k = 0; k < 4 && pick == Screen::Composite; k++) {
+        const Screen s = order[(lowerTurn + k) % 4];
+        if (s == Screen::Radar && !precip && !g_cfg.radar.every_n_cycles) continue;   // radar only when asked for
+        if (usable(s)) { pick = s; lowerTurn = (uint8_t)((lowerTurn + k + 1) % 4); }
+      }
+      if (pick != lowerScreen && pick == Screen::Radar) resetRadarLoop(now);
+      lowerScreen = pick;
+      uint32_t secs = 2UL * d.page_sec;
+      if (pick == Screen::World && g_cfg.world.show_sec) secs = g_cfg.world.show_sec;
+      if (pick == Screen::Radar) secs = g_cfg.radar.show_sec;
+      lowerUntil = now + secs * 1000UL;
+    }
+    switch (lowerScreen) {
+      case Screen::Forecast: drawForecast(c); break;
+      case Screen::Hourly: drawHourly(c); break;
+      case Screen::Radar: drawRadar(c, now); break;
+      case Screen::World: drawWorldScreen(c); break;
+      default: break;
+    }
+  }
+
   void applyDisplay() { lastBri = 0; if (pageIdx >= g_cfg.display.npages) pageIdx = 0; }
   void requestTest(uint32_t hold_ms) { screen = Screen::Test; testStart = millis(); screenUntil = testStart + hold_ms; }
 
@@ -1300,7 +1355,9 @@ namespace renderer {
           pageIdx++;
           // pages whose data is missing (sensor unplugged, no tide station) are skipped without breaking the cycle count
           while (pageIdx < d.npages && !pageAvailable(d.pages[pageIdx])) pageIdx++;
-          if (pageIdx >= d.npages) {
+          if (pageIdx >= d.npages && lowerOn) {
+            pageIdx = 0;                         // the lower half shows the full screens; the clock stays put
+          } else if (pageIdx >= d.npages) {
             pageIdx = 0;
             cyclesSinceFull++;
             cyclesSinceRadar++;
