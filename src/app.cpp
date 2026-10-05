@@ -40,7 +40,7 @@ namespace app {
       if (fl & (CHG_WEATHER | CHG_LOCATION)) net_task::kick(net_task::JOB_WEATHER);
       if (fl & (CHG_ALERTS | CHG_LOCATION)) net_task::kick(net_task::JOB_ALERTS);
       if (fl & CHG_WIFI) wifi_mgr::applyCredentials(g_cfg.wifi);
-      if (fl & CHG_PANEL) { rebootFlags |= CHG_PANEL; panel::setLatchBlanking(g_cfg.panel.latch_blanking); }
+      if (fl & CHG_PANEL) { rebootFlags |= CHG_PANEL; panel::setLatchBlanking(g_cfg.panel.latch_blanking); panel::setRotation(g_cfg.panel.rotation); }
       if (fl & (CHG_LIGHTNING | CHG_LOCATION)) lightning::applyConfig();
     }
   }

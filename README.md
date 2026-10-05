@@ -84,6 +84,10 @@ arrives, and is configured entirely through its own web interface.
 | Speaker (optional) | 4-8 ohm on the board's speaker connector, needed for the chime |
 | CR1220 / LIR battery (optional) | On the SH1.0 connector to keep the RTC running without power |
 
+The firmware also runs on the **Guition ESP32-4848S040** 4-inch 480x480 touch LCD (build `guition_lcd4848`). It draws
+the same 64x32 clock as LED-style dots and uses the touch panel as a key; that board has no speaker or RTC. See
+[docs/hardware.md](docs/hardware.md) for pins and flashing.
+
 **Where the parts came from**
 
 | Controller | Panel | Indoor sensor | I2C cable |
@@ -161,6 +165,9 @@ S3's native USB, so no driver is needed.
 
 Later updates can be uploaded from the browser (Update tab) with `.pio/build/seengreat_hub75_s3/firmware.bin`; settings
 are kept across updates.
+
+For the 4-inch LCD board, build with `pio run -e guition_lcd4848` and flash through its CH340 port at 460800 baud
+(details in [docs/hardware.md](docs/hardware.md)). Its browser updates use `.pio/build/guition_lcd4848/firmware.bin`.
 
 ## First-time setup
 

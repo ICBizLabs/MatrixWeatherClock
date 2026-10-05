@@ -378,6 +378,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, Stri
     if (!getNum(o, "color_depth_bits", p.color_depth_bits, t, err, 4, 8)) return false;
     if (!getBool(o, "double_buffer", p.double_buffer, t, err)) return false;
     if (!getBool(o, "swap_rb", p.swap_rb, t, err)) return false;
+    if (!getNum(o, "rotation", p.rotation, t, err, 0, 3)) return false;
     if (t) changed |= CHG_PANEL;
   }
 
@@ -829,6 +830,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["color_depth_bits"] = p.color_depth_bits;
   o["double_buffer"] = p.double_buffer;
   o["swap_rb"] = p.swap_rb;
+  o["rotation"] = p.rotation;
 
   o = dst["audio"].to<JsonObject>();
   const AudioConfig& a = c.audio;

@@ -3,7 +3,7 @@
 ## Controller: Seengreat RGB Matrix HUB75 S3 (SKU 260612)
 
 ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM), native USB-C (device id 303A:1001), second USB-C and a
-VH-4P screw terminal for panel power (5 V / 4 A max). Wiki: https://seengreat.com/wiki/214/rgb-matrix-hub75-s3 Module datasheet: [ESP32-S3-N16R8.pdf](ESP32-S3-N16R8.pdf)
+VH-4P screw terminal for panel power (5 V / 4 A max). Wiki: https://seengreat.com/wiki/214/rgb-matrix-hub75-s3
 
 | Function | GPIO | Function | GPIO |
 |---|---|---|---|
@@ -59,3 +59,51 @@ Panel settings apply after a reboot. If the device resets three times in a row w
 (for example because a wrong driver setting hangs the DMA driver), the panel section is reset to defaults and
 the brightness lowered to 64 on the next boot; the log says `boot loop detected`. As a last resort hold BOOT
 while resetting and re-flash, or erase everything with `pio run -t erase` (this also removes WiFi settings).
+
+## Controller: Guition ESP32-4848S040 4-inch LCD (build `guition_lcd4848`)
+
+ESP32-S3 with 16 MB quad flash and 8 MB in-package octal PSRAM, a 480x480 IPS panel with an ST7701S driver on the
+16-bit RGB interface, GT911 capacitive touch, and a CH340 USB-serial chip on UART0. It has no audio codec, RTC,
+key expander or speaker, so the clock runs without sound and takes its time from NTP only.
+
+The clock keeps its 64x32 layout. Each clock pixel is drawn as a 6x6 dot in a 7-pixel cell, so the picture is
+448x224 on the panel and still looks like an LED matrix. **Panel > LCD rotation** turns it in quarter steps and
+applies at once. The default is 90 degrees, taken from the Arduino_GFX definition for the 86-box version; change it
+if the picture comes out sideways. The HUB75 settings on that card do
+nothing on this board.
+
+| Function | GPIO | Function | GPIO |
+|---|---|---|---|
+| RGB R0-R4 | 11 12 13 14 0 | DE / VSYNC / HSYNC / PCLK | 18 / 17 / 16 / 21 |
+| RGB G0-G5 | 8 20 3 46 9 10 | ST7701S SPI CS / SCK / SDA | 39 / 48 / 47 |
+| RGB B0-B4 | 4 5 6 7 15 | Backlight (PWM, active high) | 38 |
+| Touch I2C SDA / SCL | 19 / 45 | GT911 address | 0x5D (or 0x14) |
+| Console (CH340) TX / RX | 43 / 44 | micro-SD CS / MISO | 42 / 41 |
+
+The ST7701S init sequence is the one the board's stock firmware sends (Arduino_GFX `st7701_type9_init_operations`):
+no display inversion and register 0xCD = 0x00. Timing is 12 MHz pixel clock, HSYNC 8/50/10, VSYNC 8/20/10, about
+42 frames per second. The driver reads the PSRAM frame buffer through DRAM bounce buffers, which is the usual guard
+against the picture drifting under WiFi load.
+
+Brightness drives the backlight PWM. Any level above 0 starts from a floor of about 6%, because the LED-tuned night
+level would otherwise leave the backlight nearly off.
+
+Touch works as one big key. A tap shows the next page or snoozes a ringing alarm. Holding for 1.5 s stops an alarm,
+clears a message or acknowledges alerts.
+
+The IR receiver is off by default because GPIO 44, its usual pin, is the console's receive line here. The firmware
+refuses any pin the LCD, touch or console uses. An indoor sensor can share the touch bus on GPIO 19/45.
+
+Flashing: GPIO 19/20 carry touch and LCD data, so there is no native USB. Upload through the CH340 port at 460800
+baud, because it drops bytes at 921600. From Windows, with esptool:
+
+```sh
+pio run -e guition_lcd4848
+esptool --chip esp32s3 --port COM11 --baud 460800 write-flash 0x0 .pio/build/guition_lcd4848/firmware.factory.bin
+```
+
+Read the full flash first (`esptool --port COM11 --baud 460800 read-flash 0 0x1000000 stock.bin`) if you want to be
+able to put the vendor demo back.
+
+`docs/ESP32-S3-N16R8.pdf` is a JCZN Arduino getting-started guide. It covers their JC1060P470 (an ESP32-P4 board)
+and has no pinout or schematic for either board here.

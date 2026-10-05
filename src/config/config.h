@@ -143,6 +143,11 @@ struct PanelConfig {
   uint8_t color_depth_bits = 8;
   bool double_buffer = false;
   bool swap_rb = false;
+#if defined(MWC_BOARD_LCD4848)
+  uint8_t rotation = 1;         // LCD only: quarter turns clockwise (0..3); the 4848S040 mounts its panel turned
+#else
+  uint8_t rotation = 0;         // LCD only: quarter turns clockwise (0..3)
+#endif
 };
 struct QuietConfig {
   bool enabled = true;
@@ -252,7 +257,11 @@ struct RadarConfig {              // animated NEXRAD loop from the Iowa Environm
 constexpr uint8_t MAX_REMOTE_BUTTONS = 24;
 struct RemoteButton { uint32_t code = 0; uint8_t action = 0; };   // action = actions::Id
 struct RemoteConfig {             // infrared receiver module on one GPIO (see io/ir_remote.h)
+#if defined(MWC_BOARD_LCD4848)
+  bool enabled = false;           // the LCD board has no free pad by default: GPIO 44 is its UART0 console
+#else
   bool enabled = true;
+#endif
   int8_t pin = 44;                // RX0 pad on the bottom header; the console runs over USB so it is free
   RemoteButton buttons[MAX_REMOTE_BUTTONS];
   uint8_t nbuttons = 0;

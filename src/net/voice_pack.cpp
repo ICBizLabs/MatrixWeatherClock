@@ -118,6 +118,7 @@ namespace voice_pack {
 
   void run(const AppConfig& cfg) {
     if (!wifi_mgr::isConnected() || app::rebootPending()) return;
+    if (!audio_out::available()) { forced = false; return; }               // no speaker on this board: nothing to say it with
     const bool want = cfg.audio.speech.enabled || forced;
     if (!want) return;
     voice::PackInfo pi = voice::info();

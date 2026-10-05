@@ -58,10 +58,18 @@ namespace updater {
       }, err);
       if (take()) { st.last_check_ms = millis(); give(); }
       if (!ok) { setState(State::Error, err.c_str()); LOGW("update: check failed: %s", err.c_str()); return false; }
-      const char* ver = doc["version"] | "";
-      const char* ota = doc["ota"] | "";
-      const char* sum = doc["ota_md5"] | "";
-      uint32_t size = doc["ota_size"] | 0;
+#if defined(MWC_BOARD_LCD4848)
+      // The top-level entries are the HUB75 build. This board only takes an image listed under its own key, so a
+      // HUB75 release can never be installed here (it would leave the screen dark).
+      JsonObjectConst src = doc["boards"]["lcd4848"];
+      if (src.isNull()) { setState(State::Error, "manifest has no build for the LCD board"); LOGI("update: manifest has no lcd4848 build"); return false; }
+#else
+      JsonObjectConst src = doc.as<JsonObjectConst>();
+#endif
+      const char* ver = src["version"] | "";
+      const char* ota = src["ota"] | "";
+      const char* sum = src["ota_md5"] | "";
+      uint32_t size = src["ota_size"] | 0;
       if (!*ver || !*ota) { setState(State::Error, "manifest has no version/ota"); return false; }
       String url = cfg.update.url;
       int slash = url.lastIndexOf('/');

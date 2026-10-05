@@ -1,4 +1,5 @@
 #include "panel.h"
+#if !defined(MWC_BOARD_LCD4848)
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <math.h>
 #include "pins.h"
@@ -125,4 +126,7 @@ namespace panel {
   int refreshRateHz() { return isValid ? dma->calculated_refresh_rate : 0; }
 
   const char* driverName() { return panel_driver_name(driverIdx); }
+
+  void setRotation(uint8_t) {}
 }
+#endif

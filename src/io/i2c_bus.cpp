@@ -46,14 +46,14 @@ namespace i2c_bus {
         Wire.beginTransmission(a);
         if (Wire.endTransmission() != 0) continue;
         m.found[m.n++] = a;
-        if (a == pins::I2C_ADDR_RTC) m.rtc = a;
-        else if (a >= 0x18 && a <= 0x1F) {
+        if (a == pins::I2C_ADDR_RTC && pins::HAS_RTC) m.rtc = a;
+        else if (a >= 0x18 && a <= 0x1F && pins::HAS_AUDIO) {
           if (!m.es8311 && probeES8311(a)) m.es8311 = a;
           else if (!m.pca9557) m.pca9557 = a;
         }
       }
       unlock();
-      return m.n < 12 && m.rtc != 0;   // this board always has its RTC at 0x51; more than a dozen devices is noise
+      return m.n < 12 && (m.rtc != 0 || !pins::HAS_RTC);   // the HUB75 board always has its RTC at 0x51; more than a dozen devices is noise
     }
   }
 

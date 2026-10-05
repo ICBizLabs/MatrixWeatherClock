@@ -4,6 +4,7 @@
 #include <freertos/queue.h>
 #include <driver/gpio.h>
 #include "actions.h"
+#include "pins.h"
 #include "util/log.h"
 
 namespace ir_remote {
@@ -76,6 +77,7 @@ namespace ir_remote {
 
     bool startRx(int8_t pin) {
       if (pin < 0) return false;
+      if (pins::reserved(pin)) { LOGW("remote: GPIO %d is in use by this board, receiver not started", pin); return false; }
       if (!rmtInit(pin, RMT_RX_MODE, RMT_MEM_NUM_BLOCKS_2, TICK_HZ)) { LOGW("remote: RMT init failed on GPIO %d", pin); return false; }
       gpio_pullup_en((gpio_num_t)pin);       // receivers idle high; keeps an unconnected pin quiet
       rmtSetRxMinThreshold(pin, 120);        // ignore glitches shorter than 120 us

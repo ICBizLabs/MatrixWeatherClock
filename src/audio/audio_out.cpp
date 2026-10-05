@@ -279,6 +279,7 @@ namespace audio_out {
 
   bool begin(const AudioConfig& ac, uint8_t codecAddr) {
     cfg = ac;
+    if (!pins::HAS_AUDIO) { LOGI("audio: none on this board"); return false; }
     pinMode(pins::PA_EN, OUTPUT);
     digitalWrite(pins::PA_EN, LOW);
     if (!codecAddr) { LOGW("audio: no ES8311 found, audio disabled"); return false; }

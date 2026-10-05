@@ -1,4 +1,4 @@
-// Matrix Weather Clock - Seengreat RGB Matrix HUB75 S3 + 64x32 HUB75 panel.
+// Matrix Weather Clock - Seengreat RGB Matrix HUB75 S3 + 64x32 HUB75 panel, or the Guition 4-inch LCD board.
 // Clock + local weather (Open-Meteo) + NWS alerts with a chime, configured through the built-in web UI.
 #include <Arduino.h>
 #include <LittleFS.h>
@@ -12,6 +12,7 @@
 #include "io/buttons.h"
 #include "io/env_sensor.h"
 #include "io/ir_remote.h"
+#include "io/touch.h"
 #include "config/config.h"
 #include "display/panel.h"
 #include "display/canvas.h"
@@ -115,8 +116,8 @@ void setup() {
     g_bootAttempts = 0;
   }
 
-  if (!panel::begin(g_cfg.panel, g_cfg.display.brightness, g_cfg.display.gamma)) LOGE("HUB75 begin failed");
-  else LOGI("HUB75 ok %ux%u @ %d Hz", g_cfg.panel.width, g_cfg.panel.height, panel::refreshRateHz());
+  if (!panel::begin(g_cfg.panel, g_cfg.display.brightness, g_cfg.display.gamma)) LOGE("panel begin failed");
+  else LOGI("panel ok: %s @ %d Hz", panel::driverName(), panel::refreshRateHz());
   frame_snapshot::begin(layout::W, layout::H);
   renderer::begin(millis());
   if (g_cfg.first_boot) renderer::requestTest(10000);
@@ -130,6 +131,7 @@ void setup() {
   voice::begin(g_cfg.audio);
   voice_pack::begin();
   buttons::begin(onButton);
+  touch::begin(onButton);
   env_sensor::begin(g_cfg.indoor);
   addSensorPages();
   if (g_cfg.display.moon_page) {   // the moon page needs nothing but the date
@@ -147,6 +149,7 @@ void loop() {
   wifi_mgr::loop();
   timesvc::loop();
   buttons::loop();
+  touch::loop();
   i2c_bus::loop();
   env_sensor::loop(now);
   if (env_sensor::consumeDetectedEvent()) { app::cfgLock(); addSensorPages(); app::cfgUnlock(); }
