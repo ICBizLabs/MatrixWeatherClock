@@ -1,6 +1,7 @@
 #include "buttons.h"
 #include "pca9557.h"
 #include "io/i2c_bus.h"
+#include "pins.h"
 #include "util/log.h"
 
 namespace buttons {
@@ -15,8 +16,35 @@ namespace buttons {
     constexpr uint32_t POLL_MS = 20, DEBOUNCE_MS = 30, LONG_MS = 1500;
   }
 
+  namespace {
+    // A single key on a plain GPIO (the C3 board's BOOT key): short press = K1, long press = K2.
+    bool gpioKey = false, keyDown = false, keyLong = false;
+    uint32_t keyChangeAt = 0, keyDownAt = 0;
+    bool keyLevel = true;
+
+    void gpioLoop() {
+      const uint32_t now = millis();
+      if (now - lastPoll < POLL_MS) return;
+      lastPoll = now;
+      const bool level = digitalRead(pins::KEY);            // active low
+      if (level != keyLevel) { keyLevel = level; keyChangeAt = now; return; }
+      if (now - keyChangeAt < DEBOUNCE_MS) return;
+      const bool down = !level;
+      if (down && !keyDown) { keyDown = true; keyLong = false; keyDownAt = now; }
+      else if (!down && keyDown) { keyDown = false; if (!keyLong && handler) handler(K1, false); }
+      if (keyDown && !keyLong && now - keyDownAt >= LONG_MS) { keyLong = true; if (handler) handler(K2, false); }
+    }
+  }
+
   void begin(Handler h) {
     handler = h;
+    if (pins::KEY >= 0) {
+      pinMode(pins::KEY, INPUT_PULLUP);
+      keyLevel = digitalRead(pins::KEY);
+      gpioKey = ready = true;
+      LOGI("buttons: key on GPIO %d (tap = next page, hold = dismiss)", pins::KEY);
+      return;
+    }
     uint8_t addr = i2c_bus::map().pca9557;
     if (!addr || !pca9557::begin(addr)) { LOGW("buttons: no PCA9557, keys disabled"); return; }
     uint8_t v;
@@ -28,6 +56,7 @@ namespace buttons {
 
   void loop() {
     if (!ready) return;
+    if (gpioKey) { gpioLoop(); return; }
     uint32_t now = millis();
     if (now - lastPoll < POLL_MS) return;
     lastPoll = now;

@@ -8,6 +8,7 @@
 // The ST7701S is configured once over a bit-banged 3-wire SPI link (9-bit words: D/C bit, then 8 data bits),
 // then fed continuously over the ESP32-S3 RGB interface from a PSRAM frame buffer through DRAM bounce buffers.
 // The init table is the one this board's stock firmware sends (same as Arduino_GFX st7701_type9_init_operations).
+#include "board.h"
 #if defined(MWC_BOARD_LCD4848)
 #include "panel.h"
 #include <esp_lcd_panel_rgb.h>

@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include "board.h"
 
 // ---- enumerations shared across modules -------------------------------------------------------
 enum class Severity : uint8_t { Unknown = 0, Minor, Moderate, Severe, Extreme };
@@ -259,6 +260,8 @@ struct RemoteButton { uint32_t code = 0; uint8_t action = 0; };   // action = ac
 struct RemoteConfig {             // infrared receiver module on one GPIO (see io/ir_remote.h)
 #if defined(MWC_BOARD_LCD4848)
   bool enabled = false;           // the LCD board has no free pad by default: GPIO 44 is its UART0 console
+#elif defined(MWC_BOARD_C3TV)
+  bool enabled = false;           // the C3 has no GPIO 44 and no free pad
 #else
   bool enabled = true;
 #endif

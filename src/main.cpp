@@ -79,7 +79,9 @@ static void onButton(uint8_t key, bool longPress) {
 void setup() {
   // Send every allocation of 4 KB or more to PSRAM (default threshold is 16 KB). Keeps internal RAM free and
   // unfragmented for WiFi, TLS handshakes and task stacks; DMA buffers and stacks ask for internal RAM explicitly.
+#if defined(BOARD_HAS_PSRAM)
   heap_caps_malloc_extmem_enable(4096);
+#endif
   Serial.begin(115200);
   uint32_t t0 = millis();
   while (!Serial && millis() - t0 < 1500) delay(10);

@@ -12,6 +12,7 @@
 #include "util/psram_alloc.h"
 #include "util/log.h"
 #include "version.h"
+#include "board.h"
 
 namespace updater {
   namespace {
@@ -58,14 +59,13 @@ namespace updater {
       }, err);
       if (take()) { st.last_check_ms = millis(); give(); }
       if (!ok) { setState(State::Error, err.c_str()); LOGW("update: check failed: %s", err.c_str()); return false; }
-#if defined(MWC_BOARD_LCD4848)
-      // The top-level entries are the HUB75 build. This board only takes an image listed under its own key, so a
-      // HUB75 release can never be installed here (it would leave the screen dark).
-      JsonObjectConst src = doc["boards"]["lcd4848"];
-      if (src.isNull()) { setState(State::Error, "manifest has no build for the LCD board"); LOGI("update: manifest has no lcd4848 build"); return false; }
-#else
+      // The top-level entries are the HUB75 build. Other boards only take an image listed under their own key in
+      // "boards", so a HUB75 release can never be installed on them (a dark screen, or the wrong chip altogether).
       JsonObjectConst src = doc.as<JsonObjectConst>();
-#endif
+      if (MWC_UPDATE_KEY[0]) {
+        src = doc["boards"][MWC_UPDATE_KEY];
+        if (src.isNull()) { setState(State::Error, "manifest has no build for this board"); LOGI("update: manifest has no %s build", MWC_UPDATE_KEY); return false; }
+      }
       const char* ver = src["version"] | "";
       const char* ota = src["ota"] | "";
       const char* sum = src["ota_md5"] | "";

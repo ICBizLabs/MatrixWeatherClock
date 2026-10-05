@@ -119,3 +119,35 @@ able to put the vendor demo back.
 
 `docs/ESP32-S3-N16R8.pdf` is a JCZN Arduino getting-started guide. It covers their JC1060P470 (an ESP32-P4 board)
 and has no pinout or schematic for either board here.
+
+## Controller: Spotpear ESP32-C3 1.44-inch mini TV (build `spotpear_c3tv`)
+
+ESP32-C3 (one RISC-V core at 160 MHz, about 400 KB RAM, no PSRAM) with a 16 MB W25Q128 flash, a 1.44-inch
+128x128 ST7735 TFT, a PL4054 battery charger, and micro-USB wired to the C3's native USB-Serial/JTAG. Pins come
+from the vendor schematic and demo (`Spotpear/ESP32C3_1.44inch`, TFT_eSPI `User_Setup.h`).
+
+| Function | GPIO |
+|---|---|
+| TFT MOSI / SCLK / CS / DC / RST | 4 / 3 / 2 / 0 / 5 |
+| Backlight | wired on, no control |
+| BOOT key (active low) | 9 |
+| USB D- / D+ | 18 / 19 |
+
+The panel is the ST7735 "green tab 3" type. The firmware sends the vendor's init sequence (TFT_eSPI Rcmd1,
+Rcmd2green, Rcmd3), inversion off, and the vendor's rotation 2: MADCTL 0x08 (BGR) with column offset 2 and row
+offset 1. **Panel > LCD rotation** turns the picture in software on top of that.
+
+What the C3 leaves out, and why:
+
+- **Radar.** Its 12 frames, PNG decoder and work buffers live in PSRAM on the S3. Without PSRAM they fail to
+  allocate, the radar stops fetching, and the lower half skips it.
+- **Sound and the voice pack.** There is no codec or speaker.
+- **I2C.** Every free GPIO is a strap, USB or UART pin, so there is no bus: no RTC, indoor sensor or touch. The
+  time comes from NTP.
+- **IR receiver.** It is off by default, and the firmware refuses the display, key, USB and flash pins.
+- **Indoor history graph.** The web page's 24-hour graph needs a 23 KB buffer from PSRAM and answers "no memory".
+
+Tasks that were pinned to the S3's second core run on core 0. The partition table is the same 16 MB layout as
+the S3 boards. Check the chip with `esptool flash-id` before the first flash, and keep a `read-flash` backup of the
+vendor demo if you want it back.
+

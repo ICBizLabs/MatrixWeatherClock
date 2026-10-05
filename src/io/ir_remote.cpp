@@ -101,7 +101,7 @@ namespace ir_remote {
     q = xQueueCreate(8, sizeof(Frame));
     st.pin = cfg.pin;
     st.enabled = cfg.enabled;
-    xTaskCreatePinnedToCore(rxTask, "ir", 3072, nullptr, 1, &task, 1);
+    xTaskCreatePinnedToCore(rxTask, "ir", 3072, nullptr, 1, &task, portNUM_PROCESSORS - 1);   // the C3 has one core
     if (cfg.enabled) startRx(cfg.pin);
   }
 

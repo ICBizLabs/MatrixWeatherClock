@@ -7,7 +7,8 @@ arrives, and is configured entirely through its own web interface.
 
 It also runs on the **Guition ESP32-4848S040**, a 4-inch 480x480 touch LCD with an ESP32-S3. There the screen shows
 a 64x64 LED-style dot matrix: the clock and its pages on top, and the forecast, hourly graph, world clock and radar
-taking turns underneath. See [4-inch LCD board](#4-inch-lcd-board).
+taking turns underneath. See [4-inch LCD board](#4-inch-lcd-board). A third build targets the **Spotpear ESP32-C3
+1.44-inch "mini TV"** pendant, with the same picture on a 128x128 screen; see [ESP32-C3 mini TV](#esp32-c3-mini-tv).
 
 > Status: running on real hardware (the controller and panel listed below). The panel driver, WiFi setup, weather,
 > NWS alerts, web interface, OTA and self-update are in daily use. The alert chime, thumb-wheel keys, lightning feed
@@ -105,6 +106,22 @@ and flash it. Build it with `pio run -e guition_lcd4848`.
 | Updates | Browser uploads work with `.pio/build/guition_lcd4848/firmware.bin`. Automatic updates only install an image published for this board, never the HUB75 one |
 
 Pins, timings and flashing details are in [docs/hardware.md](docs/hardware.md).
+
+### ESP32-C3 mini TV
+
+The **Spotpear ESP32-C3 1.44-inch "mini TV"** pendant ([wiki](https://spotpear.com/wiki/ESP32-C3-desktop-trinket-Mini-TV-Portable-Pendant-LVGL-1.44inch-LCD-ST7735.html))
+is a much smaller chip: one core, about 400 KB of RAM and no PSRAM. Build it with `pio run -e spotpear_c3tv` and
+upload over its USB port with `pio run -e spotpear_c3tv -t upload`.
+
+> Status: builds, not yet run on the device.
+
+| On the C3 board | What happens |
+|---|---|
+| Screen | The same 64x64 picture as the 4-inch LCD, at 2 pixels per dot, which fills the 128x128 screen exactly: the clock on top, the forecast, hourly graph and world clock taking turns underneath |
+| Brightness | The backlight has no control line, so brightness dims the colours instead, with a floor so the night level stays readable |
+| Key | The BOOT key: press for the next page, hold 1.5 s to dismiss an alarm, message or alerts |
+| Not available | Radar (no memory for its frames), sound and the voice pack, battery-backed clock, indoor sensor and IR receiver (no free pins) |
+| Updates | Browser uploads work with `.pio/build/spotpear_c3tv/firmware.bin`. Automatic updates only install an image published for this board |
 
 **Where the parts came from**
 

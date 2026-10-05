@@ -1,5 +1,6 @@
 #include "panel.h"
-#if !defined(MWC_BOARD_LCD4848)
+#include "board.h"
+#if defined(MWC_BOARD_HUB75)
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <math.h>
 #include "pins.h"

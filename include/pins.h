@@ -1,8 +1,8 @@
 #pragma once
 #include <stdint.h>
+#include "board.h"
 
-// Board pin maps. The build environment picks one: MWC_BOARD_LCD4848 selects the Guition ESP32-4848S040
-// 4-inch LCD board, anything else is the Seengreat HUB75 controller.
+// Board pin maps, one per MWC_BOARD_* (see board.h).
 
 #if defined(MWC_BOARD_LCD4848)
 
@@ -36,11 +36,38 @@ namespace pins {
   constexpr int8_t SD_MISO = 41, SD_CLK = 48, SD_MOSI = 47, SD_CS = 42;
 
   constexpr int8_t BOOT_BTN = 0;                              // doubles as red bit 4 once the panel runs
+  constexpr int8_t KEY = -1;                                  // no plain GPIO key
 
   // Pins a user setting (IR receiver) must never claim: the LCD bus, touch I2C and the UART0 console.
   constexpr bool reserved(int pin) {
     return pin == 0 || (pin >= 3 && pin <= 21) || pin == 38 || pin == 39 || pin == 43 || pin == 44 ||
            pin == 45 || pin == 46 || pin == 47 || pin == 48;
+  }
+}
+
+#elif defined(MWC_BOARD_C3TV)
+
+// Spotpear ESP32-C3 "mini TV" pendant: 1.44-inch 128x128 ST7735 (green tab 3) on SPI, backlight wired on,
+// 16 MB W25Q128 flash, no PSRAM, native USB on GPIO 18/19, a BOOT key on GPIO 9, battery charger.
+// No audio, RTC, touch or free I2C pins.
+namespace pins {
+  constexpr bool HAS_HUB75 = false;
+  constexpr bool HAS_AUDIO = false;
+  constexpr bool HAS_RTC = false;
+  constexpr bool HAS_TOUCH = false;
+
+  constexpr int8_t TFT_MOSI = 4, TFT_SCLK = 3, TFT_CS = 2, TFT_DC = 0, TFT_RST = 5;
+  constexpr int8_t KEY = 9;                                   // BOOT key, active low (also the boot strap)
+
+  constexpr int8_t SDA = -1, SCL = -1;                        // no I2C: every pin left is a strap, USB or UART
+  constexpr uint8_t I2C_ADDR_RTC = 0x51;
+  constexpr int8_t I2S_MCLK = -1, I2S_BCLK = -1, I2S_LRCK = -1, I2S_DOUT = -1, I2S_DIN = -1, PA_EN = -1;
+  constexpr int8_t BOOT_BTN = 9;
+
+  // Pins a user setting (IR receiver) must never claim: the display, the BOOT key, USB, flash, and pins the C3
+  // does not have.
+  constexpr bool reserved(int pin) {
+    return pin <= 5 || pin == 9 || (pin >= 11 && pin <= 19) || pin > 21;
   }
 }
 
@@ -73,6 +100,7 @@ namespace pins {
   constexpr int8_t SD_MISO = 42, SD_CLK = 41, SD_MOSI = 40, SD_CS = 39;
 
   constexpr int8_t BOOT_BTN = 0;
+  constexpr int8_t KEY = -1;        // keys come through the PCA9557
 
   constexpr bool reserved(int pin) { (void)pin; return false; }
 }

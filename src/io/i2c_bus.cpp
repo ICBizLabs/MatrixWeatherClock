@@ -26,6 +26,7 @@ namespace i2c_bus {
   }
 
   void begin() {
+    if (pins::SDA < 0) { LOGI("I2C: none on this board"); return; }    // no mutex: lock() fails and every access says no
     mtx = xSemaphoreCreateMutex();
     Wire.begin(pins::SDA, pins::SCL, 400000);
     Wire.setTimeOut(50);
@@ -59,6 +60,7 @@ namespace i2c_bus {
 
   const Map& identify() {
     if (scanned) return theMap;
+    if (pins::SDA < 0) { scanned = true; return theMap; }   // no bus on this board
     Map m;
     bool ok = scanInto(m);
     if (!ok) { delay(20); ok = scanInto(m); }
