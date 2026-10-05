@@ -37,6 +37,7 @@ namespace pins {
 
   constexpr int8_t BOOT_BTN = 0;                              // doubles as red bit 4 once the panel runs
   constexpr int8_t KEY = -1;                                  // no plain GPIO key
+  constexpr int8_t KEY1 = -1, KEY2 = -1;
 
   // Pins a user setting (IR receiver) must never claim: the LCD bus, touch I2C and the UART0 console.
   constexpr bool reserved(int pin) {
@@ -58,6 +59,7 @@ namespace pins {
 
   constexpr int8_t TFT_MOSI = 4, TFT_SCLK = 3, TFT_CS = 2, TFT_DC = 0, TFT_RST = 5;
   constexpr int8_t KEY = 9;                                   // BOOT key, active low (also the boot strap)
+  constexpr int8_t KEY1 = 8, KEY2 = 10;                       // Key1 / Key2 to ground (GPIO 8 is a strap too)
 
   constexpr int8_t SDA = -1, SCL = -1;                        // no I2C: every pin left is a strap, USB or UART
   constexpr uint8_t I2C_ADDR_RTC = 0x51;
@@ -67,7 +69,7 @@ namespace pins {
   // Pins a user setting (IR receiver) must never claim: the display, the BOOT key, USB, flash, and pins the C3
   // does not have.
   constexpr bool reserved(int pin) {
-    return pin <= 5 || pin == 9 || (pin >= 11 && pin <= 19) || pin > 21;
+    return pin <= 5 || (pin >= 8 && pin <= 19) || pin > 21;
   }
 }
 
@@ -101,6 +103,7 @@ namespace pins {
 
   constexpr int8_t BOOT_BTN = 0;
   constexpr int8_t KEY = -1;        // keys come through the PCA9557
+  constexpr int8_t KEY1 = -1, KEY2 = -1;
 
   constexpr bool reserved(int pin) { (void)pin; return false; }
 }

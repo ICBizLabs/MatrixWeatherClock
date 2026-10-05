@@ -2,6 +2,9 @@
 #include "pca9557.h"
 #include "io/i2c_bus.h"
 #include "pins.h"
+#include "actions.h"
+#include "alarm/alarm.h"
+#include "display/renderer.h"
 #include "util/log.h"
 
 namespace buttons {
@@ -17,32 +20,56 @@ namespace buttons {
   }
 
   namespace {
-    // A single key on a plain GPIO (the C3 board's BOOT key): short press = K1, long press = K2.
-    bool gpioKey = false, keyDown = false, keyLong = false;
-    uint32_t keyChangeAt = 0, keyDownAt = 0;
-    bool keyLevel = true;
+    // Keys on plain GPIOs (the C3 board: Key1, Key2 and BOOT, all to ground). Each has its own tap and hold.
+    // While an alarm or timer rings every key goes to the handler instead: tap snoozes, hold stops.
+    struct GpioKey {
+      int8_t pin;
+      void (*tap)();
+      void (*hold)();
+      bool level = true, down = false, longFired = false;
+      uint32_t changeAt = 0, downAt = 0;
+    };
+    GpioKey gkeys[] = {
+      { pins::KEY1, [] { renderer::prevPage(); },                  [] { actions::run(actions::Id::BrightDown, "key"); } },
+      { pins::KEY2, [] { renderer::nextPage(); },                  [] { actions::run(actions::Id::BrightUp, "key"); } },
+      { pins::KEY,  [] { if (!renderer::stepLower(1)) renderer::nextPage(); }, nullptr },   // hold: dismiss (K2)
+    };
+    bool gpioKeys = false;
+
+    void fire(GpioKey& k, bool hold) {
+      LOGI("key GPIO %d %s", k.pin, hold ? "hold" : "tap");
+      // short K1 = next page / snooze, short K2 = dismiss / stop (a long K2 would mean 'play the chime')
+      if (alarmclock::ringing() || (hold && !k.hold)) { if (handler) handler(hold ? K2 : K1, false); return; }
+      if (hold) k.hold(); else if (k.tap) k.tap();
+    }
 
     void gpioLoop() {
       const uint32_t now = millis();
       if (now - lastPoll < POLL_MS) return;
       lastPoll = now;
-      const bool level = digitalRead(pins::KEY);            // active low
-      if (level != keyLevel) { keyLevel = level; keyChangeAt = now; return; }
-      if (now - keyChangeAt < DEBOUNCE_MS) return;
-      const bool down = !level;
-      if (down && !keyDown) { keyDown = true; keyLong = false; keyDownAt = now; }
-      else if (!down && keyDown) { keyDown = false; if (!keyLong && handler) handler(K1, false); }
-      if (keyDown && !keyLong && now - keyDownAt >= LONG_MS) { keyLong = true; if (handler) handler(K2, false); }
+      for (GpioKey& k : gkeys) {
+        if (k.pin < 0) continue;
+        const bool level = digitalRead(k.pin);                 // active low
+        if (level != k.level) { k.level = level; k.changeAt = now; continue; }
+        if (now - k.changeAt < DEBOUNCE_MS) continue;
+        const bool down = !level;
+        if (down && !k.down) { k.down = true; k.longFired = false; k.downAt = now; }
+        else if (!down && k.down) { k.down = false; if (!k.longFired) fire(k, false); }
+        if (k.down && !k.longFired && now - k.downAt >= LONG_MS) { k.longFired = true; fire(k, true); }
+      }
     }
   }
 
   void begin(Handler h) {
     handler = h;
     if (pins::KEY >= 0) {
-      pinMode(pins::KEY, INPUT_PULLUP);
-      keyLevel = digitalRead(pins::KEY);
-      gpioKey = ready = true;
-      LOGI("buttons: key on GPIO %d (tap = next page, hold = dismiss)", pins::KEY);
+      for (GpioKey& k : gkeys) {
+        if (k.pin < 0) continue;
+        pinMode(k.pin, INPUT_PULLUP);
+        k.level = digitalRead(k.pin);
+      }
+      gpioKeys = ready = true;
+      LOGI("buttons: keys on GPIO %d, %d, %d", pins::KEY1, pins::KEY2, pins::KEY);
       return;
     }
     uint8_t addr = i2c_bus::map().pca9557;
@@ -56,7 +83,7 @@ namespace buttons {
 
   void loop() {
     if (!ready) return;
-    if (gpioKey) { gpioLoop(); return; }
+    if (gpioKeys) { gpioLoop(); return; }
     uint32_t now = millis();
     if (now - lastPoll < POLL_MS) return;
     lastPoll = now;

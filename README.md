@@ -113,13 +113,13 @@ The **Spotpear ESP32-C3 1.44-inch "mini TV"** pendant ([wiki](https://spotpear.c
 is a much smaller chip: one core, about 400 KB of RAM and no PSRAM. Build it with `pio run -e spotpear_c3tv` and
 upload over its USB port with `pio run -e spotpear_c3tv -t upload`.
 
-> Status: builds, not yet run on the device.
+> Status: running on the device: display, keys, WiFi, NTP time and weather.
 
 | On the C3 board | What happens |
 |---|---|
 | Screen | The same 64x64 picture as the 4-inch LCD, at 2 pixels per dot, which fills the 128x128 screen exactly: the clock on top, the forecast, hourly graph and world clock taking turns underneath |
 | Brightness | The backlight has no control line, so brightness dims the colours instead, with a floor so the night level stays readable |
-| Key | The BOOT key: press for the next page, hold 1.5 s to dismiss an alarm, message or alerts |
+| Keys | Key1: previous page, hold for dimmer. Key2: next page, hold for brighter. BOOT: next bottom screen, hold to dismiss an alarm, message or alerts. While an alarm rings, a tap snoozes and a hold stops it. The fourth button is reset |
 | Not available | Radar (no memory for its frames), sound and the voice pack, battery-backed clock, indoor sensor and IR receiver (no free pins) |
 | Updates | Browser uploads work with `.pio/build/spotpear_c3tv/firmware.bin`. Automatic updates only install an image published for this board |
 

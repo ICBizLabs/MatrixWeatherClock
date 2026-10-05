@@ -130,7 +130,9 @@ from the vendor schematic and demo (`Spotpear/ESP32C3_1.44inch`, TFT_eSPI `User_
 |---|---|
 | TFT MOSI / SCLK / CS / DC / RST | 4 / 3 / 2 / 0 / 5 |
 | Backlight | wired on, no control |
-| BOOT key (active low) | 9 |
+| Key1 / Key2 (to ground) | 8 / 10 |
+| BOOT key (to ground) | 9 |
+| Red LED (unused) | 11 |
 | USB D- / D+ | 18 / 19 |
 
 The panel is the ST7735 "green tab 3" type. The firmware sends the vendor's init sequence (TFT_eSPI Rcmd1,
@@ -146,6 +148,18 @@ What the C3 leaves out, and why:
   time comes from NTP.
 - **IR receiver.** It is off by default, and the firmware refuses the display, key, USB and flash pins.
 - **Indoor history graph.** The web page's 24-hour graph needs a 23 KB buffer from PSRAM and answers "no memory".
+
+Keys, each with a tap and a 1.5 s hold:
+
+| Key | Tap | Hold |
+|---|---|---|
+| Key1 (GPIO 8) | Previous page | Dimmer |
+| Key2 (GPIO 10) | Next page | Brighter |
+| BOOT (GPIO 9) | Next lower screen | Dismiss an alarm, message or alerts |
+
+While an alarm or timer rings, any tap snoozes and any hold stops it. The fourth button resets the chip.
+
+On the device, with WiFi up and weather fetched over HTTPS, about 70 KB of RAM stays free.
 
 Tasks that were pinned to the S3's second core run on core 0. The partition table is the same 16 MB layout as
 the S3 boards. Check the chip with `esptool flash-id` before the first flash, and keep a `read-flash` backup of the
