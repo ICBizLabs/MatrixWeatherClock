@@ -1086,6 +1086,27 @@ namespace renderer {
       return level ? level : 1;
     }
 
+    // ---- lower half (square LCD) ----
+    constexpr Screen LOWER_ORDER[4] = { Screen::Forecast, Screen::Hourly, Screen::World, Screen::Radar };
+    bool lowerUsable(Screen s) {
+      const DisplayConfig& d = g_cfg.display;
+      switch (s) {
+        case Screen::Forecast: return d.forecast_page && wx.valid && wx.ndaily > 0;
+        case Screen::Hourly:   return d.hourly_page && wx.valid && wx.nhourly >= 2;
+        case Screen::World:    return g_cfg.world.enabled && worldReady();
+        case Screen::Radar:    return screen != Screen::Radar && !night && radarAvailable();   // one radar loop at a time
+        default:               return false;
+      }
+    }
+    void lowerShow(Screen pick, uint32_t now) {
+      if (pick != lowerScreen && pick == Screen::Radar) resetRadarLoop(now);
+      lowerScreen = pick;
+      uint32_t secs = 2UL * g_cfg.display.page_sec;
+      if (pick == Screen::World && g_cfg.world.show_sec) secs = g_cfg.world.show_sec;
+      if (pick == Screen::Radar) secs = g_cfg.radar.show_sec;
+      lowerUntil = now + secs * 1000UL;
+    }
+
     void startTransition(uint8_t fromPage, bool fromLightning, uint32_t now) {
       if (!g_cfg.display.transitions) return;
       transFrom = fromPage;
@@ -1107,27 +1128,44 @@ namespace renderer {
 
   void enableLower() { lowerOn = true; }
 
+  bool stepLower(int8_t dir) {
+    if (!lowerOn) return false;
+    int8_t cur = -1;
+    for (int8_t i = 0; i < 4; i++) if (LOWER_ORDER[i] == lowerScreen) cur = i;
+    if (cur < 0) cur = dir > 0 ? 3 : 0;               // nothing shown yet: start from the first (or last) one
+    for (int8_t k = 1; k <= 4; k++) {
+      const Screen s = LOWER_ORDER[((cur + dir * k) % 4 + 4) % 4];
+      if (!lowerUsable(s)) continue;
+      lowerTurn = (uint8_t)((((cur + dir * k) % 4 + 4) % 4 + 1) % 4);   // the automatic rotation carries on from here
+      lowerShow(s, millis());
+      return true;
+    }
+    return false;
+  }
+
+  void prevPage() {
+    uint32_t now = millis();
+    const uint8_t n = g_cfg.display.npages ? g_cfg.display.npages : 1;
+    startTransition(g_cfg.display.pages[pageIdx < g_cfg.display.npages ? pageIdx : 0], showLightningPage, now);
+    showLightningPage = false;
+    pageIdx = (uint8_t)((pageIdx + n - 1) % n);
+    for (uint8_t g = 0; g < g_cfg.display.npages && !pageAvailable(g_cfg.display.pages[pageIdx]); g++) pageIdx = (uint8_t)((pageIdx + n - 1) % n);
+    pageSince = now;
+    if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
+  }
+
   void tickLower(Canvas& c, uint32_t now) {
     c.fillScreen(0);
     if (!lowerOn) return;
     // follow whatever owns the top: nothing below a splash, test pattern or update, or when night hides the bottom
     if (otaActive || screen == Screen::Test || screen == Screen::Splash) return;
     if (night && g_cfg.display.night.hide_bottom) return;
-    const DisplayConfig& d = g_cfg.display;
-    auto usable = [&](Screen s) {
-      switch (s) {
-        case Screen::Forecast: return d.forecast_page && wx.valid && wx.ndaily > 0;
-        case Screen::Hourly:   return d.hourly_page && wx.valid && wx.nhourly >= 2;
-        case Screen::World:    return g_cfg.world.enabled && worldReady();
-        case Screen::Radar:    return screen != Screen::Radar && !night && radarAvailable();   // one radar loop at a time
-        default:               return false;
-      }
-    };
+    auto usable = [](Screen s) { return lowerUsable(s); };
     const bool expired = lowerScreen == Screen::Composite || (int32_t)(now - lowerUntil) >= 0 || !usable(lowerScreen);
     if (expired) {
       // round-robin; with rain or snow about, the radar comes back every other turn
       const bool precip = usable(Screen::Radar) && (radar::echoNearby() || (wx.valid && isPrecipCode(wx.cur.wmo)));
-      const Screen order[4] = { Screen::Forecast, Screen::Hourly, Screen::World, Screen::Radar };
+      const Screen* order = LOWER_ORDER;
       Screen pick = Screen::Composite;
       if (precip && lowerScreen != Screen::Radar && g_cfg.radar.show_when_precip) pick = Screen::Radar;
       for (uint8_t k = 0; k < 4 && pick == Screen::Composite; k++) {
@@ -1135,12 +1173,7 @@ namespace renderer {
         if (s == Screen::Radar && !precip && !g_cfg.radar.every_n_cycles) continue;   // radar only when asked for
         if (usable(s)) { pick = s; lowerTurn = (uint8_t)((lowerTurn + k + 1) % 4); }
       }
-      if (pick != lowerScreen && pick == Screen::Radar) resetRadarLoop(now);
-      lowerScreen = pick;
-      uint32_t secs = 2UL * d.page_sec;
-      if (pick == Screen::World && g_cfg.world.show_sec) secs = g_cfg.world.show_sec;
-      if (pick == Screen::Radar) secs = g_cfg.radar.show_sec;
-      lowerUntil = now + secs * 1000UL;
+      lowerShow(pick, now);
     }
     switch (lowerScreen) {
       case Screen::Forecast: drawForecast(c); break;

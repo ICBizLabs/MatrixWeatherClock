@@ -100,7 +100,7 @@ and flash it. Build it with `pio run -e guition_lcd4848`.
 | Screen | A 64x64 matrix of round-cornered dots fills the screen, so it keeps the LED look. The top half is the usual clock with its rotating pages, alerts, alarms and themes. The bottom half cycles the 3-day forecast, the 12-hour graph, the world clock and the radar loop, and brings the radar forward when rain or snow is near. On the HUB75 matrix those screens still replace the clock for a while, as before |
 | Rotation | **Panel > LCD rotation** turns the picture in 90-degree steps and applies at once |
 | Brightness | Drives the backlight, with a floor so the night level stays readable |
-| Touch | Tap for the next page or to snooze an alarm. Hold for 1.5 s to stop an alarm, clear a message or acknowledge alerts |
+| Touch | Tap for the next page or to snooze an alarm. Hold for 1.5 s to stop an alarm, clear a message or acknowledge alerts. Swipe left or right on the top half for the next or previous page, and on the bottom half for the next or previous forecast, graph, world clock or radar screen. Swipe up or down to change brightness. Directions follow the picture, whatever the rotation |
 | Not available | No speaker (no chime or spoken announcements), no battery-backed clock (time comes from the internet), no thumb-wheel keys. The IR receiver is off by default because its usual pin is the board's console line |
 | Updates | Browser uploads work with `.pio/build/guition_lcd4848/firmware.bin`. Automatic updates only install an image published for this board, never the HUB75 one |
 

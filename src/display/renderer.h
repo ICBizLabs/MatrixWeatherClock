@@ -12,6 +12,7 @@ namespace renderer {
   // cycle there instead of replacing the clock. Call tickLower() right after tick() with its own canvas.
   void enableLower();
   void tickLower(Canvas& c, uint32_t now_ms);
+  bool stepLower(int8_t dir);                 // +1 / -1: show the next / previous lower-half screen now
   void requestTest(uint32_t hold_ms);
   bool requestFullScreen(const char* name);   // "forecast", "hourly" (two page periods) or "radar" (radar.show_sec)
   const char* fullScreenBlockReason();        // "" when the periodic full screens can appear, else why not
@@ -23,6 +24,7 @@ namespace renderer {
   String messageText();
   uint32_t messageRemainingSec();
   void nextPage();
+  void prevPage();
   void setDemo(bool on, uint32_t total_ms = 10 * 60000UL, bool sound = false, uint8_t start = 0);   // cycle demo scenarios from index `start` (synthetic data), auto-off
   bool demoActive();
   bool demoSound();

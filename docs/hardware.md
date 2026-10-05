@@ -90,8 +90,18 @@ against the picture drifting under WiFi load.
 Brightness drives the backlight PWM. Any level above 0 starts from a floor of about 6%, because the LED-tuned night
 level would otherwise leave the backlight nearly off.
 
-Touch works as one big key. A tap shows the next page or snoozes a ringing alarm. Holding for 1.5 s stops an alarm,
-clears a message or acknowledges alerts.
+Touch gestures, with directions as the picture appears after rotation:
+
+| Gesture | Action |
+|---|---|
+| Tap | Next page, or snooze a ringing alarm |
+| Hold 1.5 s | Stop an alarm, clear a message or acknowledge alerts |
+| Swipe left / right, top half | Next / previous page |
+| Swipe left / right, bottom half | Next / previous lower screen (forecast, hourly graph, world clock, radar) |
+| Swipe up / down | Brighter / dimmer |
+
+A swipe needs about 70 pixels of travel. While an alarm rings, any swipe snoozes it. The log names each swipe
+(`touch: swipe left on the top half`), which helps if the touch panel's axes ever turn out mirrored.
 
 The IR receiver is off by default because GPIO 44, its usual pin, is the console's receive line here. The firmware
 refuses any pin the LCD, touch or console uses. An indoor sensor can share the touch bus on GPIO 19/45.
