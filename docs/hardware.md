@@ -159,6 +159,11 @@ Keys, each with a tap and a 1.5 s hold:
 
 While an alarm or timer rings, any tap snoozes and any hold stops it. The fourth button resets the chip.
 
+**Standby:** hold Key1 and Key2 together for 2 s. The screen goes black, WiFi turns off and the chip sleeps; any
+key (or the reset button) starts it again. Alarms do not ring while it is off. The backlight is wired straight to
+the supply, so it still draws current and the battery drains slowly; unplug the battery to switch it off fully.
+(The C3 wakes from deep sleep on GPIO 0-5 only, so this is light sleep.)
+
 On the device, with WiFi up and weather fetched over HTTPS, about 70 KB of RAM stays free.
 
 Tasks that were pinned to the S3's second core run on core 0. The partition table is the same 16 MB layout as

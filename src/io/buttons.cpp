@@ -6,6 +6,13 @@
 #include "alarm/alarm.h"
 #include "display/renderer.h"
 #include "util/log.h"
+#if defined(MWC_BOARD_C3TV)
+#include "display/panel.h"
+#include "net/net_task.h"
+#include <WiFi.h>
+#include "driver/gpio.h"
+#include "esp_sleep.h"
+#endif
 
 namespace buttons {
   namespace {
@@ -36,6 +43,36 @@ namespace buttons {
     };
     bool gpioKeys = false;
 
+#if defined(MWC_BOARD_C3TV)
+    bool bothDown = false;                     // Key1 and Key2 held together: power off, not their own actions
+    uint32_t bothAt = 0;
+    constexpr uint32_t POWER_OFF_MS = 2000;
+
+    // Soft power-off for the battery board: black screen, WiFi off, then light sleep until any key is pressed,
+    // which starts the clock afresh. (Deep sleep cannot wake on these pins: the C3 wakes from deep sleep on
+    // GPIO 0-5 only.) The backlight is wired on, so it keeps drawing current; only the battery plug cuts it.
+    void powerOff() {
+      LOGW("power off: both keys held; any key turns it back on");
+      panel::blank();
+      net_task::pause(true);
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+      for (GpioKey& k : gkeys)                             // wait for release, or the held keys wake it at once
+        while (k.pin >= 0 && !digitalRead(k.pin)) delay(10);
+      delay(100);
+      for (GpioKey& k : gkeys) {
+        if (k.pin < 0) continue;
+        gpio_sleep_set_direction((gpio_num_t)k.pin, GPIO_MODE_INPUT);
+        gpio_sleep_set_pull_mode((gpio_num_t)k.pin, GPIO_PULLUP_ONLY);
+        gpio_wakeup_enable((gpio_num_t)k.pin, GPIO_INTR_LOW_LEVEL);
+      }
+      esp_sleep_enable_gpio_wakeup();
+      Serial.flush();
+      esp_light_sleep_start();
+      ESP.restart();
+    }
+#endif
+
     void fire(GpioKey& k, bool hold) {
       LOGI("key GPIO %d %s", k.pin, hold ? "hold" : "tap");
       // short K1 = next page / snooze, short K2 = dismiss / stop (a long K2 would mean 'play the chime')
@@ -57,6 +94,15 @@ namespace buttons {
         else if (!down && k.down) { k.down = false; if (!k.longFired) fire(k, false); }
         if (k.down && !k.longFired && now - k.downAt >= LONG_MS) { k.longFired = true; fire(k, true); }
       }
+#if defined(MWC_BOARD_C3TV)
+      const bool both = gkeys[0].down && gkeys[1].down;
+      if (both && !bothDown) { bothDown = true; bothAt = now; }
+      if (bothDown) {
+        gkeys[0].longFired = gkeys[1].longFired = true;     // no tap or hold of their own once both went down
+        if (!gkeys[0].down && !gkeys[1].down) bothDown = false;
+        else if (both && now - bothAt >= POWER_OFF_MS) powerOff();
+      }
+#endif
     }
   }
 

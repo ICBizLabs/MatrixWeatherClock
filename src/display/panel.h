@@ -19,4 +19,5 @@ namespace panel {
   bool stacked();                          // true when the panel shows a lower half (presentStacked is worth calling)
   int refreshRateHz();
   const char* driverName();
+  void blank();                            // black screen before power-off (ST7735 build only)
 }

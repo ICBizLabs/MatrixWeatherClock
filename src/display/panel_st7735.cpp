@@ -216,5 +216,13 @@ namespace panel {
   bool stacked() { return isValid; }
   int refreshRateHz() { return isValid ? 60 : 0; }      // the controller refreshes from its own RAM
   const char* driverName() { return "ST7735 TFT"; }
+
+  // The backlight cannot be switched off and the panel shows white once its driver sleeps, so black is as dark
+  // as it gets.
+  void blank() {
+    if (!isValid) return;
+    fullFrame = true;
+    update(nullptr, nullptr);
+  }
 }
 #endif
