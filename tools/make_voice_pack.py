@@ -25,7 +25,7 @@ EVENTS_FILE = ROOT / "tools" / "nws_event_types.json"
 NWS_TYPES_URL = "https://api.weather.gov/alerts/types"
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/"
 
-PACK_VERSION = 8
+PACK_VERSION = 9
 FORMAT = 2
 RATE = 22050
 MAGIC = b"MWCV"
@@ -41,6 +41,7 @@ EXTRA_PHRASES = [
     "forecast", "hourly graph", "tornado warning", "winter storm watch", "timer", "message", "christmas",
     "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer",
     "air quality poor", "tide", "high tide", "low tide", "moon", "full moon", "new moon",
+    "xbox", "achievement unlocked",
     # spoken time: the firmware strings these together ("it is" + hour + minute + AM/PM) in audio/voice.cpp, so the
     # pack carries about thirty small words instead of a clip for every minute of the day
     "it is", "o clock", "a m", "p m", "oh", "hundred", "zero",

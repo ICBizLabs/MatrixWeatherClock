@@ -63,6 +63,9 @@ taking turns underneath. See [4-inch LCD board](#4-inch-lcd-board). A third buil
   own script can react without an account. The two JSON field names are configurable to match the service.
 - **Moon phase**: a page with the moon drawn as it looks tonight, the phase name, how much is lit and the days to the
   next full or new moon, computed on the clock from the date alone.
+- **Xbox player**: gamerscore, online status and the game being played, the newest achievement and friends online
+  for any gamertag, through the free OpenXBL service, with a scrolling line when the player comes online or unlocks
+  an achievement.
 - **Tides**: the next high and low water from NOAA's tide predictions for the station you pick, with a rising or
   falling arrow and the height right now, as a page and on the Status tab.
 - **Animated weather radar**: an eleven-frame NEXRAD loop of the last 50 minutes around your location, full screen
@@ -111,15 +114,17 @@ Pins, timings and flashing details are in [docs/hardware.md](docs/hardware.md).
 
 The **Spotpear ESP32-C3 1.44-inch "mini TV"** pendant ([wiki](https://spotpear.com/wiki/ESP32-C3-desktop-trinket-Mini-TV-Portable-Pendant-LVGL-1.44inch-LCD-ST7735.html))
 is a much smaller chip: one core, about 400 KB of RAM and no PSRAM. Build it with `pio run -e spotpear_c3tv` and
-upload over its USB port with `pio run -e spotpear_c3tv -t upload`.
+upload over its USB port with `pio run -e spotpear_c3tv -t upload`. The screen goes white while the chip is in download
+mode and comes back when it restarts; if it stays white after an upload, tap reset.
 
-> Status: running on the device: display, keys, WiFi, NTP time and weather.
+> Status: running on the device: display, keys, standby, WiFi, NTP time, weather, alerts and the lightning feed.
 
 | On the C3 board | What happens |
 |---|---|
 | Screen | The same 64x64 picture as the 4-inch LCD, at 2 pixels per dot, which fills the 128x128 screen exactly: the clock on top, the forecast, hourly graph and world clock taking turns underneath |
 | Brightness | The backlight has no control line, so brightness dims the colours instead, with a floor so the night level stays readable |
-| Keys | Key1: previous page, hold for dimmer. Key2: next page, hold for brighter. BOOT: next bottom screen, hold to dismiss an alarm, message or alerts. While an alarm rings, a tap snoozes and a hold stops it. The fourth button is reset |
+| Keys | Key1: previous page, hold for dimmer. Key2: next page, hold for brighter. BOOT: next bottom screen, hold to dismiss an alarm, message or alerts. While an alarm rings, a tap snoozes and a hold stops it. Hold Key1 + Key2 for 2 s for standby (see below). The fourth button is reset |
+| Battery and standby | The board charges a LiPo through its PL4054 charger but has no power switch, and the backlight is wired straight to the supply. Standby (Key1 + Key2 for 2 s) blacks out the picture, turns WiFi off and sleeps the chip; any key starts the clock again. The backlight stays lit and keeps drawing about 10-20 mA, so the battery still runs down. Alarms do not ring in standby. To switch it off completely, unplug the battery |
 | Not available | Radar (no memory for its frames), sound and the voice pack, battery-backed clock, indoor sensor and IR receiver (no free pins) |
 | Updates | Browser uploads work with `.pio/build/spotpear_c3tv/firmware.bin`. Automatic updates only install an image published for this board |
 
@@ -203,6 +208,10 @@ are kept across updates.
 
 For the 4-inch LCD board, build with `pio run -e guition_lcd4848` and flash through its CH340 port at 460800 baud
 (details in [docs/hardware.md](docs/hardware.md)). Its browser updates use `.pio/build/guition_lcd4848/firmware.bin`.
+
+For the ESP32-C3 mini TV, build with `pio run -e spotpear_c3tv` and flash over its micro-USB (the C3's native USB, no
+driver needed). If the upload sits at the progress bar on Windows, write the whole image with esptool instead:
+`esptool --chip esp32c3 --port COMx write-flash 0x0 .pio/build/spotpear_c3tv/firmware.factory.bin`.
 
 ## First-time setup
 
@@ -352,7 +361,7 @@ IP address once online). After every WiFi connection the IP address is shown for
 The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
 thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
 storm watch, an alarm, a running and a finished timer, a message, the holiday themes, night mode, the indoor sensor,
-air-quality, barometer, tide and moon pages and a radar loop with a synthetic storm. It uses made-up
+air-quality, barometer, tide and moon pages, the Xbox page (a player online, then an achievement unlocking) and a radar loop with a synthetic storm. It uses made-up
 data, turns itself off after the chosen number of minutes, and the wheel push ends it early. It is silent unless
 "with sounds" is ticked, in which case the alert, lightning, alarm, timer and message scenarios play their chimes even
 during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
@@ -452,6 +461,19 @@ extremes, the shape real tides follow closely). The Status tab lists the coming 
 the predictions come from CO-OPS; `/api/status` carries the same numbers with epoch times for scripts.
 
 <img src="docs/screens/gif/tide.gif" width="384" alt="Tide page">
+
+## Xbox player
+
+The clock can follow one Xbox player through [OpenXBL](https://xbl.io), a free service in front of the Xbox Live
+web API. Sign in at xbl.io with a Microsoft account, copy the API key from the dashboard, and enter it with the
+gamertag on the Location & Weather tab under **Xbox player**. Any public gamertag works, not only the key's own.
+
+The **xbox** page shows the gamertag with a green dot while the player is online, and below it, every few seconds:
+the gamerscore, the game being played (or OFFLINE), how many friends are online, and the newest achievement. With
+*Scroll a line* ticked, the clock also scrolls a message when the player comes online or unlocks an achievement.
+Presence and friends refresh every 5 minutes and gamerscore and achievements every 15, about 40 requests an hour
+against the free tier's 150. The Status tab shows the same details and the requests used this hour. A player who
+keeps their friends list private simply has no friends line.
 
 ## Indoor sensor
 
@@ -654,7 +676,9 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweat
 | Sounds are fuzzy or distorted | Volume 100 % is the codec's full scale; the small speaker distorts near the top, so try 50-70 %. Firmware before 0.5.1 applied digital gain above 75 %, which clipped: update |
 | A page in the rotation never shows | sensor and tide pages appear only while their data exists; the panel skips them otherwise |
 | Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 4 MB of free flash), check `/api/log` for `voice:` lines |
-| Keys do nothing | Status tab shows whether the PCA9557 expander was found; `/api/log` prints raw key states |
+| Keys do nothing | Status tab shows whether the PCA9557 expander was found; `/api/log` prints raw key states. On the C3 mini TV the keys are plain GPIOs and `/api/log` prints each tap and hold |
+| C3 mini TV screen white | The chip is in download mode (during or after an upload) and nothing drives the screen: tap reset |
+| C3 mini TV screen black but lit | It is in standby: press any key. The backlight cannot be switched off from software |
 
 If a panel setting makes the board reset repeatedly, the firmware restores the panel defaults automatically after
 three quick resets. To wipe everything (including WiFi): Factory reset on the WiFi tab, or `pio run -t erase`.
@@ -665,20 +689,21 @@ More detail: [docs/hardware.md](docs/hardware.md) (pins, panel notes, test patte
 ## Project layout
 
 ```
-platformio.ini            build environment `seengreat_hub75_s3` (pioarduino, Arduino core 3.3 / IDF 5.5)
+platformio.ini            build environments `seengreat_hub75_s3`, `guition_lcd4848` and `spotpear_c3tv` (pioarduino, Arduino core 3.3 / IDF 5.5)
 partitions/mwc_16MB.csv   two 3 MB OTA app slots + LittleFS
-include/pins.h            every GPIO in one place
+include/board.h           picks the board (MWC_BOARD_HUB75 / LCD4848 / C3TV)
+include/pins.h            every GPIO in one place, one map per board
 include/fonts/            7x11 clock digits
 web/index.html            the web UI (with setup.html and remote.html); tools/build_web.py gzips them into flash at build time
 tools/make_voice_pack.py  renders the spoken phrases with Piper TTS into the voice pack (run in CI)
 src/main.cpp              boot order and the 30 fps frame loop
 src/app.*                 config staging from the web, reboot / factory reset
 src/config/               settings struct, JSON load/save/validation (LittleFS /config.json)
-src/display/              HUB75 bring-up, off-screen canvas with diff blit, renderer, icons, scroller, test pattern
+src/display/              HUB75, ST7701 LCD (panel_lcd.cpp) and ST7735 TFT (panel_st7735.cpp) drivers, off-screen canvas with diff blit, renderer, icons, scroller, test pattern
 src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download, radar loop
 src/time/                 NTP, time zone table, PCF85063 RTC driver
 src/audio/                ES8311 codec, I2S chime synthesizer, ADPCM voice-clip player, voice pack index
-src/io/                   I2C bus with device probing, PCA9557 expander, buttons, BME280/BME680 indoor sensor, IR receiver, actions
+src/io/                   I2C bus with device probing, PCA9557 expander, buttons (plus the C3's GPIO keys and standby), touch, BME280/BME680 indoor sensor, IR receiver, actions
 src/web/                  async web server, REST API, OTA
 docs/                     hardware, API and testing notes
 ```

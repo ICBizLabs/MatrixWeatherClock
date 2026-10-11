@@ -15,6 +15,7 @@
 #include "voice_pack.h"
 #include "radar.h"
 #include "tide.h"
+#include "xbox.h"
 #include "util/log.h"
 
 namespace net_task {
@@ -93,6 +94,8 @@ namespace net_task {
         if ((forced & JOB_RADAR) || radar::due(cfg, millis())) { forced &= ~JOB_RADAR; app::trace("net", "radar"); radar::run(cfg); }
         if (paused) continue;
         if ((forced & JOB_TIDE) || tide::due(cfg, millis())) { forced &= ~JOB_TIDE; app::trace("net", "tide"); tide::run(cfg); }
+        if (paused) continue;
+        if ((forced & JOB_XBOX) || xbox::due(cfg, millis())) { forced &= ~JOB_XBOX; app::trace("net", "xbox"); xbox::run(cfg); }
         if (paused) continue;
         forced &= ~JOB_WEBHOOK;
         app::trace("net", "webhook");

@@ -9,7 +9,7 @@ const char* severity_name(Severity s);
 bool        severity_parse(const char* s, Severity& out);
 
 enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_TIDE, PAGE_MOON,
-                          PAGE_UV, PAGE_SKY, PAGE_RAIN, PAGE_WATER, PAGE_WORLD, PAGE_EVENT, PAGE_COUNT };
+                          PAGE_UV, PAGE_SKY, PAGE_RAIN, PAGE_WATER, PAGE_WORLD, PAGE_EVENT, PAGE_XBOX, PAGE_COUNT };
 const char* page_name(uint8_t id);
 const char* page_label(uint8_t id);      // human name for the web UI's page picker
 bool        page_parse(const char* s, uint8_t& out);
@@ -280,6 +280,15 @@ struct TideConfig {               // NOAA CO-OPS tide predictions (US coasts)
   bool water_temp = true;         // also read the station's water temperature, when it reports one
 };
 
+struct XboxConfig {               // Xbox player stats through OpenXBL (https://xbl.io), any public gamertag
+  bool enabled = false;
+  bool auto_page = true;          // add the "xbox" page to the rotation once stats arrive
+  char api_key[48] = "";          // OpenXBL key (free, sign in at xbl.io); empty = off
+  char gamertag[16] = "";         // the player to follow
+  bool banners = true;            // scroll a line when the player comes online or unlocks an achievement
+  bool friends = true;            // also count the player's friends who are online
+};
+
 struct WebhookConfig {            // plain HTTP POST to a URL of your choice: ntfy, Gotify, Home Assistant, Discord
   bool enabled = false;
   char url[160] = "";
@@ -339,6 +348,7 @@ struct AppConfig {
   WebhookConfig webhook;
   EventsConfig events;
   WorldConfig world;
+  XboxConfig xbox;
   bool first_boot = true;
 };
 
@@ -346,7 +356,7 @@ struct AppConfig {
 enum : uint32_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
   CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192, CHG_REMOTE = 16384, CHG_TIDE = 32768,
-  CHG_WEBHOOK = 65536, CHG_EVENT = 131072, CHG_WORLD = 262144
+  CHG_WEBHOOK = 65536, CHG_EVENT = 131072, CHG_WORLD = 262144, CHG_XBOX = 524288
 };
 
 extern AppConfig g_cfg;

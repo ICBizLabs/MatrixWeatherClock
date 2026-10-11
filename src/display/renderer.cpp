@@ -21,6 +21,7 @@
 #include "util/log.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "net/xbox.h"
 #include "util/moon.h"
 #include <esp_heap_caps.h>
 #include "time/time_service.h"
@@ -475,6 +476,57 @@ namespace renderer {
       if (2 + w2 + 3 + pc.textWidth(hb) <= W) pc.drawTextRight(hb, W - 1, Y_L2 + 2, colText());
       classicFont(pc);
     }
+    // ---- Xbox player (OpenXBL) ----
+    // one line, in the 5x7 font when it fits and the 3x5 one otherwise, cut at the right edge
+    void drawFitted(Canvas& pc, char* s, int16_t x, int16_t y, int16_t maxW, uint16_t color) {
+      classicFont(pc);
+      if (pc.textWidth(s) <= maxW) { pc.drawText(s, x, y, color); return; }
+      tinyFont(pc);
+      for (size_t n = strlen(s); n > 1 && pc.textWidth(s) > maxW; ) s[--n] = '\0';
+      pc.drawText(s, x, y + 1, color);
+      classicFont(pc);
+    }
+    xbox::Data demoXbox;
+    void buildDemoXbox(bool achievement) {
+      demoXbox = xbox::Data(); demoXbox.valid = demoXbox.online = true;
+      strlcpy(demoXbox.gamertag, "Major Nelson", sizeof(demoXbox.gamertag));
+      demoXbox.gamerscore = achievement ? 412890 : 412840;
+      strlcpy(demoXbox.game, "Halo Infinite", sizeof(demoXbox.game));
+      demoXbox.friends_online = 3;
+      strlcpy(demoXbox.friend_names[0], "Larry Hryb", sizeof(demoXbox.friend_names[0]));
+      strlcpy(demoXbox.achievement, achievement ? "Legendary Finish" : "Spartan Ready", sizeof(demoXbox.achievement));
+      strlcpy(demoXbox.achievement_game, "Halo Infinite", sizeof(demoXbox.achievement_game));
+      demoXbox.achievement_t = time(nullptr) - (achievement ? 0 : 3 * 86400);
+    }
+    // gamertag and an online dot on top; below, every 3 s (2 s in the demo, so one demo step shows all four):
+    // gamerscore, what they are playing, friends online and the latest achievement
+    void drawXboxPage(Canvas& pc, uint32_t now) {
+      classicFont(pc);
+      xbox::Data d;
+      if (demo.on) d = demoXbox;
+      else if (!xbox::get(d)) { pc.drawTextCentered("XBOX: NO DATA", W / 2, Y_SINGLE, C_GREY); return; }
+      const uint16_t cOn = Canvas::rgb(0x20E020);
+      char l1[20];
+      strlcpy(l1, d.gamertag, sizeof(l1));
+      drawFitted(pc, l1, 1, Y_L1, W - 7, colDate());
+      pc.fillRect(W - 4, Y_L1 + 2, 3, 3, d.online ? cOn : C_GREY);
+      char lines[4][64];
+      uint16_t cols[4];
+      uint8_t n = 0;
+      snprintf(lines[n], sizeof(lines[n]), "%lu G", (unsigned long)d.gamerscore); cols[n++] = colTemp();
+      if (d.online) snprintf(lines[n], sizeof(lines[n]), "%s", d.game[0] ? d.game : "ONLINE");
+      else snprintf(lines[n], sizeof(lines[n]), "OFFLINE");
+      cols[n++] = d.online ? cOn : C_GREY;
+      if (d.friends_online >= 0) {
+        if (d.friends_online == 1 && d.friend_names[0][0]) snprintf(lines[n], sizeof(lines[n]), "ON: %s", d.friend_names[0]);
+        else snprintf(lines[n], sizeof(lines[n]), "%d FRIEND%s ON", d.friends_online, d.friends_online == 1 ? "" : "S");
+        cols[n++] = colText();
+      }
+      if (d.achievement[0]) { snprintf(lines[n], sizeof(lines[n]), "%s", d.achievement); cols[n++] = C_ORANGE; }
+      const uint8_t slot = (uint8_t)((now / (demo.on ? 2000 : 3000)) % n);
+      drawFitted(pc, lines[slot], 1, Y_L2, W - 2, cols[slot]);
+    }
+
     // ---- pages added in 0.14.0 ----
     void drawWaterPage(Canvas& pc, const tide::Data& d) {
       classicFont(pc);
@@ -590,6 +642,7 @@ namespace renderer {
         case PAGE_RAIN: return wx.valid && wx.ndaily;
         case PAGE_WORLD: return worldReady();
         case PAGE_EVENT: { struct tm lt; int32_t d; return timesvc::localNow(lt) && nextEvent(lt, d) >= 0; }
+        case PAGE_XBOX: { xbox::Data xd; return g_cfg.xbox.enabled && xbox::get(xd); }
         default: return true;
       }
     }
@@ -603,6 +656,7 @@ namespace renderer {
       if (id == PAGE_WATER) { tide::Data td; if (demo.on) td = demoTide; else tide::get(td); drawWaterPage(pc, td); return; }
       if (id == PAGE_WORLD) { drawWorldPage(pc); return; }
       if (id == PAGE_EVENT) { drawEventPage(pc, lt, timeValid || demo.on); return; }
+      if (id == PAGE_XBOX) { drawXboxPage(pc, now); return; }
       const uint16_t cText = colText(), cTemp = colTemp(), cDate = colDate();
       char l1[32], l2[32];
       if (id == PAGE_DATE) {
@@ -763,7 +817,7 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
-    constexpr uint8_t DEMO_COUNT = 28;
+    constexpr uint8_t DEMO_COUNT = 30;
     void buildDemoRadar();
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
@@ -817,6 +871,9 @@ namespace renderer {
                  demo.indoor.t_press = env_sensor::Trend::FallingFast; demo.indoor.d_press = -3.8f; demo.indoor.span_min = 180; break;
         case 26: demo.name = "tide";       demo.wx = demoWeather(1, true, 79, 78, 49, 9, 15, 250); demo.page = PAGE_TIDE; buildDemoTide(time(nullptr)); break;
         case 27: demo.name = "moon";       demo.wx = demoWeather(0, false, 61, 59, 55, 4, 7, 20); demo.page = PAGE_MOON; demoMoonFraction = 0.38f; break;
+        case 28: demo.name = "xbox";       demo.page = PAGE_XBOX; buildDemoXbox(false); break;
+        case 29: demo.name = "xbox achievement"; demo.page = PAGE_XBOX; buildDemoXbox(true);
+                 showMessage("Major Nelson unlocked Legendary Finish (Halo Infinite)", DEMO_STEP_MS, 0x20E020); break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
@@ -824,14 +881,15 @@ namespace renderer {
       static const char* const SPOKEN[DEMO_COUNT] = {
         "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
         "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
-        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer", "tide", "moon" };
+        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer", "tide", "moon",
+        "xbox", "achievement unlocked" };
       demo.lastRing = 0;
       if (demo.sound) {
         demo.soundPending = true;
         demo.soundPhrase = i < DEMO_COUNT ? SPOKEN[i] : nullptr;
         ChimeStyle cs = ChimeStyle::None;
         if (i == 11) cs = g_cfg.audio.chime_extreme;
-        else if (i == 5 || i == 16) cs = g_cfg.audio.chime;
+        else if (i == 5 || i == 16 || i == 29) cs = g_cfg.audio.chime;
         else if (i == 13 || i == 15) { cs = ChimeStyle::TripleBeep; demo.lastRing = now; }
         demo.soundStyle = (uint8_t)cs;
       }

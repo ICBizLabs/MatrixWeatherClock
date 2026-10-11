@@ -8,13 +8,13 @@
 namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
   const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro", "tide", "moon",
-                                     "uv", "sky", "rain", "water", "world", "event" };
+                                     "uv", "sky", "rain", "water", "world", "event", "xbox" };
   // Shown in the web UI's page picker; index-aligned with PAGE_NAMES and PageId.
   const char* const PAGE_LABELS[] = { "Date", "Temperature", "Conditions", "Wind", "High / low", "Feels like",
                                       "Sunrise / sunset", "Indoor temperature and humidity", "Air quality",
                                       "Barometer", "Tide", "Moon phase", "Ultraviolet index",
                                       "Cloud and visibility", "Rainfall", "Sea temperature", "World clock",
-                                      "Countdown" };
+                                      "Countdown", "Xbox player" };
   const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
                                       "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
   constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
@@ -624,6 +624,20 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, Stri
     if (t) changed |= CHG_WEBHOOK;
   }
 
+  o = src["xbox"];
+  if (!o.isNull()) {
+    t = false;
+    XboxConfig& xb = c.xbox;
+    if (!getBool(o, "enabled", xb.enabled, t, err)) return false;
+    if (!getBool(o, "auto_page", xb.auto_page, t, err)) return false;
+    JsonVariantConst k = o["api_key"];
+    if (k.is<const char*>() && strcmp(k.as<const char*>(), "***") != 0 && !getStr(o, "api_key", xb.api_key, t, err)) return false;
+    if (!getStr(o, "gamertag", xb.gamertag, t, err)) return false;
+    if (!getBool(o, "banners", xb.banners, t, err)) return false;
+    if (!getBool(o, "friends", xb.friends, t, err)) return false;
+    if (t) changed |= CHG_XBOX;
+  }
+
   JsonVariantConst ev = src["events"];
   if (!ev.isNull()) {
     if (!ev.is<JsonArrayConst>()) { err = "events: expected an array"; return false; }
@@ -992,6 +1006,14 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
       e["label"] = x.label;
     }
   }
+
+  o = dst["xbox"].to<JsonObject>();
+  o["enabled"] = c.xbox.enabled;
+  o["auto_page"] = c.xbox.auto_page;
+  o["api_key"] = mask_secrets ? (c.xbox.api_key[0] ? "***" : "") : c.xbox.api_key;
+  o["gamertag"] = c.xbox.gamertag;
+  o["banners"] = c.xbox.banners;
+  o["friends"] = c.xbox.friends;
 
   dst["first_boot"] = c.first_boot;
 }

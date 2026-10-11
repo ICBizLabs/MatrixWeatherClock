@@ -27,6 +27,7 @@
 #include "net/voice_pack.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "net/xbox.h"
 #include "util/moon.h"
 #include "net/shared_state.h"
 #include "net/alert_store.h"
@@ -103,6 +104,7 @@ void setup() {
   updater::begin();
   radar::begin();
   tide::begin();
+  xbox::begin();
 
   i2c_bus::begin();
   const i2c_bus::Map& i2c = i2c_bus::identify();
@@ -178,6 +180,18 @@ void loop() {
         bool has = false;
         for (uint8_t i = 0; i < g_cfg.display.npages; i++) if (g_cfg.display.pages[i] == PAGE_TIDE) has = true;
         if (!has && g_cfg.display.npages < PAGE_COUNT) g_cfg.display.pages[g_cfg.display.npages++] = PAGE_TIDE;
+        app::cfgUnlock();
+      }
+    }
+    {
+      static bool xboxPageAdded = false;
+      xbox::Data xd;
+      if (!xboxPageAdded && g_cfg.xbox.auto_page && xbox::get(xd)) {
+        xboxPageAdded = true;
+        app::cfgLock();
+        bool has = false;
+        for (uint8_t i = 0; i < g_cfg.display.npages; i++) if (g_cfg.display.pages[i] == PAGE_XBOX) has = true;
+        if (!has && g_cfg.display.npages < PAGE_COUNT) g_cfg.display.pages[g_cfg.display.npages++] = PAGE_XBOX;
         app::cfgUnlock();
       }
     }

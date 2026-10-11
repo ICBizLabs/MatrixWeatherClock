@@ -19,6 +19,7 @@
 #include "net/voice_pack.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "net/xbox.h"
 #include "net/webhook.h"
 #include "util/moon.h"
 #include "util/zambretti.h"
@@ -253,6 +254,29 @@ namespace web {
         for (uint8_t i = 0; i < td.n; i++) { JsonObject e = all.add<JsonObject>(); e["t"] = (long)td.ex[i].t; e["h"] = serialized(String(td.ex[i].h, 2)); e["high"] = td.ex[i].high; }
       }
       {
+        xbox::Status xs = xbox::status();
+        xbox::Data xd; xbox::get(xd);
+        JsonObject xo = root["xbox"].to<JsonObject>();
+        xo["enabled"] = xs.enabled;
+        xo["valid"] = xd.valid;
+        xo["xuid"] = xs.xuid;
+        xo["last_ok_age_s"] = xs.last_ok_ms ? (long)((millis() - xs.last_ok_ms) / 1000) : -1L;
+        xo["requests_hour"] = xs.requests_hour;
+        xo["error"] = xs.err;
+        if (xd.valid) {
+          xo["gamertag"] = xd.gamertag;
+          xo["gamerscore"] = xd.gamerscore;
+          xo["online"] = xd.online;
+          xo["game"] = xd.game;
+          xo["friends_online"] = xd.friends_online;
+          JsonArray fn = xo["friend_names"].to<JsonArray>();
+          for (auto& n : xd.friend_names) if (n[0]) fn.add(n);
+          xo["achievement"] = xd.achievement;
+          xo["achievement_game"] = xd.achievement_game;
+          xo["achievement_t"] = (long)xd.achievement_t;
+        }
+      }
+      {
         radar::Status rs = radar::status();
         JsonObject rd = root["radar"].to<JsonObject>();
         rd["enabled"] = rs.enabled;
@@ -474,7 +498,7 @@ namespace web {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
         { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false }, { CHG_REMOTE, "remote", false }, { CHG_TIDE, "tide", false },
         { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false },
-        { CHG_WEBHOOK, "webhook", false }, { CHG_EVENT, "events", false }, { CHG_WORLD, "world", false } };
+        { CHG_WEBHOOK, "webhook", false }, { CHG_EVENT, "events", false }, { CHG_WORLD, "world", false }, { CHG_XBOX, "xbox", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
       r->send(res);
@@ -736,6 +760,7 @@ namespace web {
       res->setLength();
       r->send(res);
     });
+    server.on("/api/xbox/refresh", HTTP_POST, [](AsyncWebServerRequest* r) { xbox::requestRefresh(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/tide/refresh", HTTP_POST, [](AsyncWebServerRequest* r) { tide::requestRefresh(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/radar/refresh", HTTP_POST, [](AsyncWebServerRequest* r) { radar::requestRefresh(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/indoor/rescan", HTTP_POST, [](AsyncWebServerRequest* r) {

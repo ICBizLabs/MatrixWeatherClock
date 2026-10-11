@@ -11,6 +11,7 @@
 #include "io/env_sensor.h"
 #include "net/radar.h"
 #include "net/tide.h"
+#include "net/xbox.h"
 #include "io/ir_remote.h"
 #include "net/wifi_manager.h"
 #include "net/net_task.h"
@@ -37,6 +38,7 @@ namespace app {
       if (fl & (CHG_RADAR | CHG_LOCATION)) radar::applyConfig();
       if (fl & CHG_REMOTE) ir_remote::apply(g_cfg.remote);
       if (fl & (CHG_TIDE | CHG_WEATHER)) tide::applyConfig();
+      if (fl & CHG_XBOX) xbox::applyConfig();
       if (fl & (CHG_WEATHER | CHG_LOCATION)) net_task::kick(net_task::JOB_WEATHER);
       if (fl & (CHG_ALERTS | CHG_LOCATION)) net_task::kick(net_task::JOB_ALERTS);
       if (fl & CHG_WIFI) wifi_mgr::applyCredentials(g_cfg.wifi);
