@@ -189,6 +189,20 @@ buttons; automatic installation can be switched off to install manually. The man
 can point its clocks at its own GitHub Pages site. The same manifest advertises the voice pack for the spoken
 announcements; the clock fetches a new pack whenever the pack version changes.
 
+## Several clocks
+
+Every clock starts with the hostname `matrixweatherclock`, so with two or more on one network only one of them answers
+at http://matrixweatherclock.local/, and it is not predictable which. Give each clock its own name on the WiFi tab
+(`kitchen-clock`, `office-clock`), reaching it by the IP address it shows after connecting, and each gets its own
+address such as http://kitchen-clock.local/. A DHCP reservation in the router keeps each clock's IP fixed as well,
+which helps on phones that do not resolve `.local` names.
+
+Automatic updates keep every clock on the same firmware without further work. To copy settings from one clock to
+another, download a backup on the Update tab and restore it on the other clock. The backup is the whole configuration,
+including the WiFi passwords, the hostname, the panel or screen settings and every API key, so either set the hostname
+back afterwards or delete the `wifi` and `panel` blocks from the file before restoring it. The same file can be posted
+to `/api/config` from a script to set up several clocks at once.
+
 ## Building and flashing
 
 Requirements: [PlatformIO Core](https://platformio.org/install/cli) (`pip install platformio`) and Python 3 (used
@@ -319,7 +333,7 @@ hold the settings. Changes apply immediately except panel driver settings, which
 | | |
 |---|---|
 | <img src="docs/ui/ui-weather.png" alt="Location & Weather tab"> | <img src="docs/ui/ui-display.png" alt="Display tab"> |
-| Location & Weather: coordinates with city/ZIP search, time zone, units, NWS alert filters, lightning, indoor sensor | Display: brightness schedule, night mode, pages, effects, colours, radar |
+| Location & Weather: coordinates with city/ZIP search, time zone, units, NWS alert filters, lightning, indoor sensor, tides, Xbox player | Display: brightness schedule, night mode, pages, effects, colours, radar |
 | <img src="docs/ui/ui-alarms.png" alt="Alarms tab"> | <img src="docs/ui/ui-update.png" alt="Update tab"> |
 | Alarms: countdown timer and four alarms with weekdays | Update: automatic updates, settings backup, firmware upload |
 | <img src="docs/ui/ui-panel.png" alt="Panel tab"> | <img src="docs/ui/ui-notify.png" alt="Notify tab"> |
@@ -348,6 +362,10 @@ a full screen: the **forecast** (three columns with weekday, icon and high/low) 
 (temperature curve and rain-chance bars for the next 12 hours). Pages slide in from the right; when it is raining,
 snowing or thundering, matching animation runs behind the weather pages. On holidays the clock changes colours and
 adds an effect (snow at Christmas, confetti on New Year and July 4th, hearts on Valentine's Day, and so on).
+
+More pages can join the rotation on the Display tab: `indoor`, `air` and `baro` (indoor sensor), `tide`, `moon`, `uv`,
+`sky`, `rain`, `water`, `world`, `event` and `xbox`. Each is described in its own section below and hides itself while it
+has no data.
 
 When an alert is active the bottom half becomes a scrolling **banner** (`EVENT: headline`, all active alerts
 in severity order) and a one-pixel frame flashes around the panel for the first minute. The clock stays visible.
@@ -472,8 +490,13 @@ The **xbox** page shows the gamertag with a green dot while the player is online
 the gamerscore, the game being played (or OFFLINE), how many friends are online, and the newest achievement. With
 *Scroll a line* ticked, the clock also scrolls a message when the player comes online or unlocks an achievement.
 Presence and friends refresh every 5 minutes and gamerscore and achievements every 15, about 40 requests an hour
-against the free tier's 150. The Status tab shows the same details and the requests used this hour. A player who
-keeps their friends list private simply has no friends line.
+against the free tier's 150. The Status tab shows the same details and the requests used this hour, with a
+*Refresh now* button. A player who keeps their friends list private simply has no friends line.
+
+The API key is shown as `***` in the web UI and in `/api/config`, but a settings backup holds it in full. The limit
+belongs to the key, so several clocks sharing one key share the 150 requests; give each clock its own key, or follow
+the player on one clock only. Demo mode has two Xbox scenes (a player online, then an achievement unlocking) that need
+no key.
 
 ## Indoor sensor
 
@@ -679,6 +702,8 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweat
 | Keys do nothing | Status tab shows whether the PCA9557 expander was found; `/api/log` prints raw key states. On the C3 mini TV the keys are plain GPIOs and `/api/log` prints each tap and hold |
 | C3 mini TV screen white | The chip is in download mode (during or after an upload) and nothing drives the screen: tap reset |
 | C3 mini TV screen black but lit | It is in standby: press any key. The backlight cannot be switched off from software |
+| Xbox page never appears | the Status tab's Xbox card shows the last error: *API key refused* (copy the key from xbl.io again), *gamertag not found* (check the spelling), *rate limited* (more than 150 requests an hour on that key, often from several clocks sharing it); `/api/log` prints `xbox:` lines |
+| Two clocks, one address | both still use the hostname `matrixweatherclock`: rename one on the WiFi tab (see *Several clocks*) |
 
 If a panel setting makes the board reset repeatedly, the firmware restores the panel defaults automatically after
 three quick resets. To wipe everything (including WiFi): Factory reset on the WiFi tab, or `pio run -t erase`.
@@ -700,7 +725,7 @@ src/main.cpp              boot order and the 30 fps frame loop
 src/app.*                 config staging from the web, reboot / factory reset
 src/config/               settings struct, JSON load/save/validation (LittleFS /config.json)
 src/display/              HUB75, ST7701 LCD (panel_lcd.cpp) and ST7735 TFT (panel_st7735.cpp) drivers, off-screen canvas with diff blit, renderer, icons, scroller, test pattern
-src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download, radar loop
+src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download, radar loop, tides, Xbox (OpenXBL)
 src/time/                 NTP, time zone table, PCF85063 RTC driver
 src/audio/                ES8311 codec, I2S chime synthesizer, ADPCM voice-clip player, voice pack index
 src/io/                   I2C bus with device probing, PCA9557 expander, buttons (plus the C3's GPIO keys and standby), touch, BME280/BME680 indoor sensor, IR receiver, actions

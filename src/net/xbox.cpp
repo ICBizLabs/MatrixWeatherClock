@@ -19,12 +19,12 @@ namespace xbox {
     SemaphoreHandle_t mtx = nullptr;
     Data data;
     Status st = {};
-    char xuid[24] = "";
+    char xuid[24] = "";                       // Xbox user id for the gamertag, looked up once; every other request needs it
     uint32_t nextFast = 0, nextSlow = 0, hourStart = 0;
     bool polledOnce = false;                   // banners only after the first full poll, so a boot stays quiet
-    char lastTitleId[16] = "";
-    uint16_t lastTitleCount = 0xFFFF;
-    volatile bool refreshReq = false, resetReq = false;
+    char lastTitleId[16] = "";                // game and achievement count seen last time, so the per-game list is
+    uint16_t lastTitleCount = 0xFFFF;          // only fetched when something new unlocked
+    volatile bool refreshReq = false, resetReq = false;   // set from the web task, acted on in the network task
 
     bool take() { return mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(100)) == pdTRUE; }
     void give() { xSemaphoreGive(mtx); }
@@ -59,7 +59,7 @@ namespace xbox {
       opt.timeoutMs = 15000;
       opt.headerName = "X-Authorization";
       opt.headerValue = cfg.xbox.api_key;
-      const uint32_t now = millis();
+      const uint32_t now = millis();                    // count requests per hour for the Status tab (free tier: 150)
       if (now - hourStart >= 3600000UL) { hourStart = now; st.requests_hour = 0; }
       st.requests_hour++;
       String err;
@@ -77,6 +77,7 @@ namespace xbox {
       return ok;
     }
 
+    // gamertag -> XUID, also picking up the gamertag as Xbox spells it
     bool lookup(const AppConfig& cfg) {
       JsonDocument filter;
       filter["people"][0]["xuid"] = true;
@@ -92,7 +93,8 @@ namespace xbox {
       return true;
     }
 
-    // online state and the foreground title
+    // Online state and the foreground title. The reply is small, so it is parsed whole. It may be an object or a
+    // one-element array (client libraries show both), so either is accepted. The home screen is not a game.
     bool fetchPresence(const AppConfig& cfg, Data& d) {
       JsonDocument doc(psramAllocator());
       int code;
@@ -137,6 +139,7 @@ namespace xbox {
       d.friends_online = n;
     }
 
+    // gamerscore (and the gamertag spelling) from the profile settings list
     bool fetchAccount(const AppConfig& cfg, Data& d) {
       JsonDocument filter;
       filter["profileUsers"][0]["settings"][0]["id"] = true;
@@ -203,6 +206,8 @@ namespace xbox {
       lastTitleCount = count;
     }
 
+    // Scroll a line when the player comes online or a newer achievement appears. Not on the first poll after boot
+    // or a gamertag change, which would announce whatever state the player happens to be in.
     void banners(const AppConfig& cfg, const Data& before, const Data& after) {
       if (!cfg.xbox.banners || !polledOnce) return;
       char line[128];
@@ -232,7 +237,7 @@ namespace xbox {
 
   void run(const AppConfig& cfg) {
     st.enabled = cfg.xbox.enabled && cfg.xbox.api_key[0] && cfg.xbox.gamertag[0];
-    if (resetReq) {
+    if (resetReq) {                            // settings changed: forget the player and start over
       resetReq = false;
       xuid[0] = lastTitleId[0] = '\0';
       lastTitleCount = 0xFFFF;
@@ -246,6 +251,8 @@ namespace xbox {
     refreshReq = false;
     if (!xuid[0] && !lookup(cfg)) { nextFast = nextSlow = now + RETRY_MS; return; }
 
+    // Fast items (presence, friends) and slow items (gamerscore, achievements) keep their own timers. Work on a copy
+    // so the screen never sees a half-updated player, and compare it with the old one for the banners.
     Data before; get(before);
     Data d = before;
     if (!d.gamertag[0]) strlcpy(d.gamertag, cfg.xbox.gamertag, sizeof(d.gamertag));

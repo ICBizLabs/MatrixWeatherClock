@@ -183,7 +183,7 @@ void loop() {
         app::cfgUnlock();
       }
     }
-    {
+    {                                          // first Xbox stats: add the page to the rotation once, like the tide page
       static bool xboxPageAdded = false;
       xbox::Data xd;
       if (!xboxPageAdded && g_cfg.xbox.auto_page && xbox::get(xd)) {
