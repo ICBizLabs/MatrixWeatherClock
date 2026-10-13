@@ -491,7 +491,9 @@ The **xbox** page shows the gamertag with a green dot while the player is online
 the gamerscore, the game being played (or OFFLINE), how many friends are online, and the newest achievement.
 The **latest achievements** screen lists the newest unlocks from the three most recently played games, each with how
 long ago it happened (`5M`, `3H`, `2D`), under the gamertag and gamerscore. It takes its turn with the forecast and the
-other full screens (on the 4-inch LCD, below the clock), and *Show achievements* puts it up straight away. With
+other full screens, and *Show achievements* puts it up straight away. On the 4-inch LCD it fills the whole square
+while it is up: the player's state and game on top, then four unlocks with their game and age underneath. The
+clock comes back on its own, and an alarm, timer, message or new alert takes the top half back at once. With
 *Scroll a line* ticked, the clock also scrolls a message when the player comes online or unlocks an achievement.
 Presence and friends refresh every 5 minutes and gamerscore and achievements every 15, about 40 requests an hour
 against the free tier's 150; a game's achievement list is only fetched again when its count goes up.

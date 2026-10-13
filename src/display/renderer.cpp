@@ -60,6 +60,7 @@ namespace renderer {
     // longer have to take the clock's place.
     bool lowerOn = false;
     Screen lowerScreen = Screen::Composite;     // Composite = nothing shown yet
+    bool xboxTall = false;                      // this frame the Xbox screen spans both halves of the square LCD
     uint32_t lowerUntil = 0;
     uint8_t lowerTurn = 0;
     uint16_t* radarFrame = nullptr;             // PSRAM, W*H pixels (allocated in begin)
@@ -1108,6 +1109,53 @@ namespace renderer {
       }
     }
 
+    // The same screen across the whole 64x64 square of the LCD, drawn once per half with the canvas shifted up by oy
+    // (0 for the top half, -H for the bottom one; the canvas clips what falls outside). Room for the player's state
+    // and four unlocks, each with its game underneath.
+    void drawXboxTall(Canvas& c, int16_t oy) {
+      xbox::Data d;
+      if (demo.on) d = demoXbox;
+      else if (!xbox::get(d)) return;
+      tinyFont(c);
+      char right[16];
+      snprintf(right, sizeof(right), "%luG", (unsigned long)d.gamerscore);
+      c.drawTextRight(right, W - 1, oy, colTemp());
+      char gt[sizeof(d.gamertag)];
+      strlcpy(gt, d.gamertag, sizeof(gt));
+      while (gt[0] && c.textWidth(gt) > W - 4 - c.textWidth(right)) gt[strlen(gt) - 1] = '\0';
+      c.drawText(gt, 1, oy, Canvas::rgb(0x20E020));
+      // online dot, then the game in the foreground (or just online / offline)
+      const int16_t sy = (int16_t)(oy + 7);
+      c.fillRect(1, sy + 1, 3, 3, d.online ? Canvas::rgb(0x20E020) : C_GREY);
+      char st[sizeof(d.game)];
+      strlcpy(st, d.online ? (d.game[0] ? d.game : "Online") : "Offline", sizeof(st));
+      while (st[0] && c.textWidth(st) > W - 7) st[strlen(st) - 1] = '\0';
+      c.drawText(st, 6, sy, d.online && d.game[0] ? colText() : C_GREY);
+      c.drawFastHLine(0, oy + 14, W, Canvas::rgb(0x303030));
+      const time_t now = time(nullptr);
+      for (uint8_t i = 0; i < d.nrecent && i < 4; i++) {
+        const int16_t y = (int16_t)(oy + 16 + i * 12);
+        char nm[sizeof(d.recent[i].name)];
+        strlcpy(nm, d.recent[i].name, sizeof(nm));
+        while (nm[0] && c.textWidth(nm) > W - 2) nm[strlen(nm) - 1] = '\0';
+        c.drawText(nm, 1, y, i == 0 ? C_ORANGE : colText());
+        const long ago = now > 1700000000 ? (long)(now - d.recent[i].t) : -1;   // clock not set: no age
+        right[0] = '\0';
+        if (ago >= 0) {
+          if (ago < 3600) snprintf(right, sizeof(right), "%ldM", max(1L, ago / 60));
+          else if (ago < 86400) snprintf(right, sizeof(right), "%ldH", ago / 3600);
+          else if (ago < 365 * 86400L) snprintf(right, sizeof(right), "%ldD", ago / 86400);
+          else snprintf(right, sizeof(right), "%ldY", ago / (365 * 86400L));
+          c.drawTextRight(right, W - 1, y + 6, C_GREY);
+        }
+        char gm[sizeof(d.recent[i].game)];
+        strlcpy(gm, d.recent[i].game, sizeof(gm));
+        const int16_t avail = (int16_t)(W - 1 - (right[0] ? c.textWidth(right) + 3 : 0));
+        while (gm[0] && c.textWidth(gm) > avail) gm[strlen(gm) - 1] = '\0';
+        c.drawText(gm, 3, y + 6, Canvas::rgb(0x707070));
+      }
+    }
+
     // One predicate and one switch, used by both places that hand the panel to a full screen. They used to be a
     // hand-copied condition and ternary chain each, which is how a new screen ends up rendering as a radar loop.
     bool isFullScreen(Screen s) {
@@ -1119,7 +1167,10 @@ namespace renderer {
         case Screen::Hourly: drawHourly(c); break;
         case Screen::Radar: drawRadar(c, now); break;
         case Screen::World: drawWorldScreen(c); break;
-        case Screen::Xbox: drawXboxScreen(c); break;
+        case Screen::Xbox:
+          if (lowerOn && !(night && g_cfg.display.night.hide_bottom)) { xboxTall = true; drawXboxTall(c, 0); }
+          else drawXboxScreen(c);
+          break;
         default: break;      // unreachable: isFullScreen() is the only gate. Draws nothing rather than guessing.
       }
     }
@@ -1268,6 +1319,7 @@ namespace renderer {
     // follow whatever owns the top: nothing below a splash, test pattern or update, or when night hides the bottom
     if (otaActive || screen == Screen::Test || screen == Screen::Splash) return;
     if (night && g_cfg.display.night.hide_bottom) return;
+    if (xboxTall && screen == Screen::Xbox) { drawXboxTall(c, -H); return; }   // the top asked for it (web / demo)
     auto usable = [](Screen s) { return lowerUsable(s); };
     const bool expired = lowerScreen == Screen::Composite || (int32_t)(now - lowerUntil) >= 0 || !usable(lowerScreen);
     if (expired) {
@@ -1288,7 +1340,7 @@ namespace renderer {
       case Screen::Hourly: drawHourly(c); break;
       case Screen::Radar: drawRadar(c, now); break;
       case Screen::World: drawWorldScreen(c); break;
-      case Screen::Xbox: drawXboxScreen(c); break;
+      case Screen::Xbox: if (xboxTall) drawXboxTall(c, -H); else drawXboxScreen(c); break;
       default: break;
     }
   }
@@ -1455,6 +1507,7 @@ namespace renderer {
 
     app::trace("render", screenName());
     c.fillScreen(0);
+    xboxTall = false;
     if (otaActive) { drawOta(c); return; }
     if (screen == Screen::Test) {
       if ((int32_t)(now - screenUntil) < 0) {
@@ -1539,6 +1592,13 @@ namespace renderer {
     }
     if (isFullScreen(screen)) {   // just switched to a full screen this tick
       drawFullScreen(c, now);
+      return;
+    }
+    // square LCD: while the lower half is on the Xbox screen it spreads over the clock too, unless something has to
+    // be seen up here (alarm, timer, message, fresh alert)
+    if (lowerOn && lowerScreen == Screen::Xbox && !interrupt && !(night && d.night.hide_bottom) && xboxScreenReady()) {
+      xboxTall = true;
+      drawXboxTall(c, 0);
       return;
     }
 
