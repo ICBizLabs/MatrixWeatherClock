@@ -485,6 +485,7 @@ the predictions come from CO-OPS; `/api/status` carries the same numbers with ep
 The clock can follow one Xbox player through [OpenXBL](https://xbl.io), a free service in front of the Xbox Live
 web API. Sign in at xbl.io with a Microsoft account, copy the API key from the dashboard, and enter it with the
 gamertag on the Location & Weather tab under **Xbox player**. Any public gamertag works, not only the key's own.
+*Test key* checks the key before you save it and shows the gamertag of the account it belongs to.
 
 The **xbox** page shows the gamertag with a green dot while the player is online, and below it, every few seconds:
 the gamerscore, the game being played (or OFFLINE), how many friends are online, and the newest achievement. With
@@ -578,6 +579,7 @@ Notify tab: paste an access token from Pushbullet's account settings. The clock 
 lightning strike of a storm (and at most every five minutes after that), and optionally for alarms. With "show pushes"
 on it also polls your account and scrolls any push sent to all devices or to the clock: pick "Matrix Weather Clock" in the
 phone app, or use IFTTT / Home Assistant / `curl` against the Pushbullet API. Pushes the clock sent itself are ignored.
+*Test token* checks the token as typed, before you save it, and shows the account name it belongs to.
 
 ## Webhook
 

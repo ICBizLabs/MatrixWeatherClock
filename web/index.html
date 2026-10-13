@@ -165,7 +165,7 @@ progress{width:100%;height:10px}
   <label>OpenXBL API key (<a href="https://xbl.io" target="_blank" rel="noopener">xbl.io</a> → sign in → API key)<input data-k="xbox.api_key" type="password" maxlength="47"></label>
   <label class="chk"><input data-k="xbox.banners" type="checkbox">Scroll a line when the player comes online or unlocks an achievement</label>
   <label class="chk"><input data-k="xbox.friends" type="checkbox">Count friends who are online</label>
- </div><div class="row"><button class="btn" onclick="saveKeys('xbox','xbox-cfg')">Save</button><span class="msg" id="msg-xbox-cfg"></span></div>
+ </div><div class="row"><button class="btn" onclick="saveKeys('xbox','xbox-cfg')">Save</button><button class="btn sec" onclick="testKey('xbox','xbox.api_key','xbox-cfg')">Test key</button><span class="msg" id="msg-xbox-cfg"></span></div>
  <p class="msg">Gamerscore, online status and game, the newest achievement and friends online for any gamertag, through the free OpenXBL service (150 requests an hour; the clock uses about 40). Leave the key as *** to keep the stored one. A private friends list just leaves that line out.</p></div>
  <div class="card"><h2>Indoor sensor (BME280 / BMP280 / BME680 on the I2C header)</h2><div class="grid">
   <label class="chk"><input data-k="indoor.enabled" type="checkbox">Enabled (auto-detected at 0x76 / 0x77)</label>
@@ -394,7 +394,7 @@ progress{width:100%;height:10px}
   <label>Show a push for (seconds, 0 = until cleared)<input data-k="pushbullet.show_sec" type="number" min="0" max="3600"></label>
   <label class="chk"><input data-k="pushbullet.chime" type="checkbox">Chime when a push is shown</label>
  </div>
- <div class="row"><button class="btn" onclick="save('notify')">Save</button><button class="btn sec" onclick="post('/api/test/push')">Send test push</button><span class="msg" id="msg-notify"></span></div>
+ <div class="row"><button class="btn" onclick="save('notify')">Save</button><button class="btn sec" onclick="post('/api/test/push')">Send test push</button><button class="btn sec" onclick="testKey('pushbullet','pushbullet.token','pb-key')">Test token</button><span class="msg" id="msg-notify"></span><span class="msg" id="msg-pb-key"></span></div>
  <p class="msg">The clock registers itself as a device called "Matrix Weather Clock" in your Pushbullet account, so you can push text to it from the phone app (choose the device) or from IFTTT / scripts. Leave the token as *** to keep the stored one.</p></div>
 </section>
 
@@ -488,6 +488,14 @@ function collect(section){const o={};$$('#'+section+' [data-k]').forEach(el=>{co
 async function saveKeys(prefix,msgId){const o={};$$('[data-k^="'+prefix+'."]').forEach(el=>{const v=readEl(el);if(v!==undefined)set(o,el.dataset.k,v);});
  say(msgId,'saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)});const j=await r.json();
  say(msgId,(!r.ok||!j.ok)?(j.error||('HTTP '+r.status)):'saved',(!r.ok||!j.ok)?'bad':'ok');}catch(e){say(msgId,String(e),'bad');}}
+// Test the key as typed (not yet saved); *** or empty tests the stored one. The clock makes the request on its
+// network task, so start it and poll for the result.
+async function testKey(service,k,msgId){const el=$('[data-k="'+k+'"]');say(msgId,'testing…');
+ try{const r=await fetch('/api/test/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service,key:el?el.value:''})});
+  const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)return say(msgId,j.error||('HTTP '+r.status),'bad');
+  for(let i=0;i<25;i++){await new Promise(f=>setTimeout(f,1000));const t=await (await fetch('/api/test/key')).json();
+   if(t.done&&t.service===service)return say(msgId,t.msg,t.ok?'ok':'bad');}
+  say(msgId,'no result yet; check /api/log','warn');}catch(e){say(msgId,String(e),'bad');}}
 function say(id,txt,cls){const m=$('#msg-'+id);if(!m)return;m.textContent=txt;m.className='msg '+(cls||'');}
 async function post(url,body,form){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json'},body:form?form:(body?JSON.stringify(body):null)});
  const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)alert(j.error||('HTTP '+r.status));else setTimeout(status,800);return j;}catch(e){alert(e);}}

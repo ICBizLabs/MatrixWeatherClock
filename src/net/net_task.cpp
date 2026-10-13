@@ -16,6 +16,7 @@
 #include "radar.h"
 #include "tide.h"
 #include "xbox.h"
+#include "key_test.h"
 #include "util/log.h"
 
 namespace net_task {
@@ -85,6 +86,8 @@ namespace net_task {
         if (paused || !wifi_mgr::isConnected()) continue;
         AppConfig cfg;
         app::cfgLock(); cfg = g_cfg; app::cfgUnlock();
+        key_test::run(cfg);              // a key test from the web UI goes first: someone is waiting for it
+        if (paused) continue;
         uint32_t now = millis();
         if (cfg.weather.enabled && ((forced & JOB_WEATHER) || (int32_t)(now - nextWx) >= 0)) { forced &= ~JOB_WEATHER; app::trace("net", "weather"); runWeather(cfg); }
         if (paused) continue;

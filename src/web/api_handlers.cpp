@@ -34,6 +34,7 @@
 #include "net/lightning.h"
 #include "net/pushbullet.h"
 #include "net/updater.h"
+#include "net/key_test.h"
 #include "display/frame_snapshot.h"
 #include "util/log.h"
 
@@ -608,6 +609,26 @@ namespace web {
       r->send(200, "application/json", "{\"ok\":true}");
     }
 
+    // POST {"service":"pushbullet"|"xbox","key":"..."} starts a key test; GET /api/test/key polls for the result
+    void handleTestKey(AsyncWebServerRequest* r, JsonVariant& json) {
+      JsonObjectConst o = json.as<JsonObjectConst>();
+      if (!key_test::start(o["service"] | "", o["key"] | "")) { sendJsonError(r, 409, "unknown service, or a test is still running"); return; }
+      r->send(200, "application/json", "{\"ok\":true}");
+    }
+
+    void handleTestKeyResult(AsyncWebServerRequest* r) {
+      key_test::Result k = key_test::result();    // not const: ArduinoJson copies char arrays but only links const ones
+      auto* res = new AsyncJsonResponse(false);
+      JsonObject root = res->getRoot();
+      root["running"] = k.running;
+      root["done"] = k.done;
+      root["ok"] = k.ok;
+      root["service"] = k.service;
+      root["msg"] = k.msg;
+      res->setLength();
+      r->send(res);
+    }
+
     void handleSayTime(AsyncWebServerRequest* r) {
       struct tm lt;
       if (!timesvc::localNow(lt)) { sendJsonError(r, 409, "clock not set yet"); return; }
@@ -857,6 +878,10 @@ namespace web {
     stopwatch->setMethod(HTTP_POST);
     server.addHandler(stopwatch);
     server.on("/api/test/webhook", HTTP_POST, handleTestWebhook);
+    auto* testKey = new AsyncCallbackJsonWebHandler("/api/test/key", handleTestKey);
+    testKey->setMethod(HTTP_POST);
+    server.addHandler(testKey);
+    server.on("/api/test/key", HTTP_GET, handleTestKeyResult);
     server.on("/api/test/say-time", HTTP_POST, handleSayTime);
   }
 }

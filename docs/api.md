@@ -42,6 +42,8 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/sleep` | `{minutes}` arms the sleep timer (0 cancels); after that many minutes the panel fades out over `display.sleep_fade_sec` and stays dark. `/api/status.sleep` is `{pending, remaining_s, faded}` |
 | POST | `/api/stopwatch` | `{action}` one of `start`, `stop`, `reset`, `toggle`; returns `{ok, running, ms}`. `/api/status.stopwatch` is `{running, active, ms}` |
 | POST | `/api/test/say-time` | speaks the current time from the pack's number clips (`?force=1` ignores quiet hours); 409 when the clock is not set, the feature is off, or the pack has no number clips |
+| POST | `/api/test/key` | `{"service":"pushbullet"\|"xbox","key":"..."}` checks a key without saving it (an empty key or `***` tests the stored one) by asking the service who it belongs to; 409 while a test runs |
+| GET | `/api/test/key` | the last key test: `{running, done, ok, service, msg}`, where `msg` is the account name or why the key failed |
 | POST | `/api/test/webhook` | post a test notification to the configured webhook URL; 409 when no webhook is configured |
 | GET | `/api/config?download=1` | full configuration with passwords, as a downloadable backup |
 | POST | `/api/test/push` | send a test Pushbullet notification |

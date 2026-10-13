@@ -64,11 +64,15 @@ namespace xbox {
       st.requests_hour++;
       String err;
       code = 0;
+      // OpenXBL wraps the Xbox Live reply in {"content": ...}; the filter allows both, and the wrapper is dropped
+      JsonDocument wrapped;
+      if (filter) { wrapped.set(*filter); wrapped["content"] = *filter; }
       bool ok = http_util::get(String(API) + path, opt, [&](Stream& s, int) {
-        DeserializationError e = filter ? deserializeJson(doc, s, DeserializationOption::Filter(*filter))
+        DeserializationError e = filter ? deserializeJson(doc, s, DeserializationOption::Filter(wrapped))
                                         : deserializeJson(doc, s);
         return e == DeserializationError::Ok;
       }, err, &code);
+      if (ok && !doc["content"].isNull()) { JsonDocument inner(psramAllocator()); inner.set(doc["content"]); doc = std::move(inner); }
       if (!ok) {
         if (code == 429) err = "rate limited (150 requests an hour)";
         else if (code == 401 || code == 403) err = "API key refused";
@@ -77,18 +81,22 @@ namespace xbox {
       return ok;
     }
 
-    // gamertag -> XUID, also picking up the gamertag as Xbox spells it
+    // gamertag -> XUID (the search answers with a profile, like /account), also picking up the gamertag as Xbox spells it
     bool lookup(const AppConfig& cfg) {
       JsonDocument filter;
-      filter["people"][0]["xuid"] = true;
-      filter["people"][0]["gamertag"] = true;
+      filter["profileUsers"][0]["id"] = true;
+      filter["profileUsers"][0]["settings"][0]["id"] = true;
+      filter["profileUsers"][0]["settings"][0]["value"] = true;
       JsonDocument doc(psramAllocator());
       int code;
       if (!call(cfg, String("/friends/search?gt=") + urlEncode(cfg.xbox.gamertag), doc, &filter, code)) return false;
-      const char* x = doc["people"][0]["xuid"] | "";
+      const char* x = doc["profileUsers"][0]["id"] | "";
       if (!x[0]) { fail("gamertag not found"); return false; }
       strlcpy(xuid, x, sizeof(xuid));
-      if (take()) { strlcpy(st.xuid, xuid, sizeof(st.xuid)); strlcpy(data.gamertag, doc["people"][0]["gamertag"] | cfg.xbox.gamertag, sizeof(data.gamertag)); give(); }
+      const char* gt = cfg.xbox.gamertag;
+      JsonArrayConst settings = doc["profileUsers"][0]["settings"];
+      for (JsonVariantConst s : settings) if (!strcmp(s["id"] | "", "Gamertag") && (s["value"] | "")[0]) gt = s["value"];
+      if (take()) { strlcpy(st.xuid, xuid, sizeof(st.xuid)); strlcpy(data.gamertag, gt, sizeof(data.gamertag)); give(); }
       LOGI("xbox: %s is xuid %s", cfg.xbox.gamertag, xuid);
       return true;
     }
