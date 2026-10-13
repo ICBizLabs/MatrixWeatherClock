@@ -111,13 +111,17 @@ progress{width:100%;height:10px}
   <button class="btn sec" onclick="geosearch()">Find</button>
   <select id="geores" hidden onchange="geopick()"></select>
   <button class="btn sec" id="geobtn" onclick="geo()" hidden>Use my location</button><span class="msg" id="msg-geo"></span></div>
- <p class="msg">Pick a match to fill in the coordinates, then Save. Only the coordinates are used; the name is just a label.</p></div>
+ <p class="msg">Pick a match to fill in the coordinates, then Save. Only the coordinates are used; the name is just a label.</p>
+ <div class="row"><button class="btn" onclick="save('weather','location')">Save</button><span class="msg" id="msg-location"></span></div>
+</div>
  <div class="card"><h2>Weather (Open-Meteo)</h2><div class="grid">
   <label class="chk"><input data-k="weather.enabled" type="checkbox">Enabled</label>
   <label>Units<select data-k="weather.units"><option value="imperial">°F, mph</option><option value="metric">°C, km/h</option></select></label>
   <label>Refresh (minutes)<input data-k="weather.refresh_min" type="number" min="5" max="1440"></label>
   <label>Forecast days<input data-k="weather.forecast_days" type="number" min="1" max="3"></label>
- </div></div>
+ </div>
+ <div class="row"><button class="btn" onclick="save('weather','weather-cfg')">Save</button><span class="msg" id="msg-weather-cfg"></span></div>
+</div>
  <div class="card"><h2>NWS alerts (api.weather.gov)</h2><div class="grid">
   <label class="chk"><input data-k="alerts.enabled" type="checkbox">Enabled</label>
   <label>Contact for User-Agent (required by NWS)<input data-k="alerts.user_agent_contact" placeholder="you@example.com" maxlength="63"></label>
@@ -129,7 +133,8 @@ progress{width:100%;height:10px}
   <label>Banner speed (px/s)<input data-k="alerts.banner_px_per_s" type="number" min="5" max="80"></label>
   <label class="chk"><input data-k="alerts.tls_verify" type="checkbox">Verify TLS certificate (needs /nws_root.pem)</label>
  </div>
- </div>
+ <div class="row"><button class="btn" onclick="save('weather','alerts-cfg')">Save</button><span class="msg" id="msg-alerts-cfg"></span></div>
+</div>
  <div class="card"><h2>Lightning (Blitzortung network)</h2><div class="grid">
   <label class="chk"><input data-k="lightning.enabled" type="checkbox">Enabled</label>
   <label>Radius (km)<input data-k="lightning.radius_km" type="number" min="5" max="300"></label>
@@ -150,7 +155,7 @@ progress{width:100%;height:10px}
   <label>Heights in<select data-k="tide.unit"><option value="auto">Automatic (feet with °F, metres with °C)</option><option value="ft">feet</option><option value="m">metres</option></select></label>
   <label>Refresh every (hours)<input data-k="tide.refresh_hours" type="number" min="1" max="24"></label>
   <label class="chk"><input data-k="tide.water_temp" type="checkbox">Also read the water temperature (not every station has one)</label>
- </div><div class="row"><button class="btn" onclick="save('weather')">Save</button><button class="btn sec" onclick="findTideStations()">Find nearest stations</button><span class="msg" id="msg-tide-cfg"></span></div>
+ </div><div class="row"><button class="btn" onclick="save('weather','tide-cfg')">Save</button><button class="btn sec" onclick="findTideStations()">Find nearest stations</button><span class="msg" id="msg-tide-cfg"></span></div>
  <div class="list" id="tide-stations"></div>
  <p class="msg">High and low water predictions for one NOAA tide station (US coasts, Great Lakes excluded), datum MLLW. "Find nearest stations" downloads NOAA's station list in your browser and lists the six closest to the coordinates above; pick one and Save.</p></div>
  <div class="card"><h2>Xbox player (OpenXBL)</h2><div class="grid">
@@ -178,7 +183,7 @@ progress{width:100%;height:10px}
   <label>Air quality "poor" below (%)<input data-k="indoor.air_poor_below" type="number" min="1" max="100"></label>
   <label class="chk"><input data-k="indoor.air_alert" type="checkbox">Chime / speak / push when the air stays poor for two minutes</label>
   <label>At most one air alert every (minutes)<input data-k="indoor.air_alert_min" type="number" min="5" max="1440"></label>
- </div><div class="row"><button class="btn" onclick="save('weather')">Save</button><span class="msg" id="msg-indoor"></span></div>
+ </div><div class="row"><button class="btn" onclick="save('weather','indoor')">Save</button><span class="msg" id="msg-indoor"></span></div>
  <p class="msg">Wire 3.3 V, GND, SDA (GPIO 1) and SCL (GPIO 2). Keep the sensor a few inches from the panel and the controller, or set a temperature offset. Trend arrows: up / down when the change over the window exceeds 0.5 °C, 3 % or 1 hPa; a double arrow means three times that. The air-quality score is relative: 75 % from the gas resistance against a clean-air baseline the clock learns (kept across reboots), 25 % from how close humidity is to 40 %. It needs about five minutes after power-up and improves over the first day.</p></div>
 </section>
 
@@ -198,7 +203,8 @@ progress{width:100%;height:10px}
   <label>Night mode until<input data-k="display.night_mode.end" type="time"></label>
   <label>Night mode level<input data-k="display.night_mode.level" type="number" min="1" max="255"></label>
   <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
- </div></div>
+ </div>
+ <div class="row"><button class="btn" onclick="save('display','brightness')">Save</button><span class="msg" id="msg-brightness"></span></div></div>
  <div class="card"><h2>Pages</h2><div class="grid">
   <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
   <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
@@ -214,7 +220,8 @@ progress{width:100%;height:10px}
  <h2 style="font-size:14px;margin:14px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em">Pages in the rotation</h2>
  <div class="pagelist" id="pagelist"></div>
  <input type="hidden" data-k="display.pages" data-list="1" id="pageshidden">
- <p class="msg">Tick a page to put it in the rotation, then drag it by the handle, or use the arrows, to set the order. A ticked page still hides itself when it has nothing to show, so the sea-temperature page stays out of the way if your tide station has no thermometer.</p></div>
+ <p class="msg">Tick a page to put it in the rotation, then drag it by the handle, or use the arrows, to set the order. A ticked page still hides itself when it has nothing to show, so the sea-temperature page stays out of the way if your tide station has no thermometer.</p>
+ <div class="row"><button class="btn" onclick="save('display','pages')">Save</button><span class="msg" id="msg-pages"></span></div></div>
  <div class="card"><h2>Sleep timer</h2><div class="row"><input id="sleepmin" type="number" min="1" max="720" value="30" style="width:90px"> minutes
   <button class="btn" onclick="post('/api/sleep',{minutes:Number($('#sleepmin').value)})">Sleep</button><button class="btn sec" onclick="post('/api/sleep',{minutes:0})">Cancel</button>
   <span class="msg" id="msg-sleep"></span></div>
@@ -228,7 +235,7 @@ progress{width:100%;height:10px}
  </div>
  <div class="grid" id="holthemes" style="margin-top:8px"></div>
  <input type="hidden" data-k="display.holidays_enabled" data-num="1" id="holidaysbits">
- <div class="row"><button class="btn" onclick="save('display')">Save</button><span class="msg" id="msg-themes"></span></div>
+ <div class="row"><button class="btn" onclick="save('display','themes')">Save</button><span class="msg" id="msg-themes"></span></div>
  <p class="msg">Untick a holiday to skip it; your own dates above are not affected. "Show one now" pins a theme until you set it back to Automatic, which also works for a holiday you have unticked. The decoration (snow, confetti, hearts) still gives way to real rain or snow, to night mode, and to an alarm or alert.</p></div>
  <div class="card"><h2>Colours</h2>
   <div class="row"><label>Start from a theme<select id="presetsel" onchange="applyPreset(this)"></select></label><span class="msg" id="msg-preset"></span></div>
@@ -251,7 +258,7 @@ progress{width:100%;height:10px}
   <label>Fetch a new frame every (minutes)<input data-k="radar.refresh_min" type="number" min="2" max="30"></label>
   <label>Radar data<select data-k="radar.source"><option value="nowcoast">NOAA nowCOAST MRMS mosaic (quality controlled)</option><option value="mesonet">Iowa Mesonet NEXRAD composite (unfiltered)</option></select></label>
   <label>Base map under the echoes<select data-k="radar.base_map"><option value="both">Coastline and water tint</option><option value="coast">Coastline only</option><option value="landwater">Water tint only</option><option value="none">None</option></select></label>
- </div><div class="row"><button class="btn" onclick="save('display')">Save</button><span class="msg" id="msg-radar-cfg"></span></div>
+ </div><div class="row"><button class="btn" onclick="save('display','radar-cfg')">Save</button><span class="msg" id="msg-radar-cfg"></span></div>
  <div class="card"><h2>World clock</h2>
   <p class="msg">Up to four places at once on a full screen. Pick a zone, or type a POSIX TZ rule of your own for somewhere not listed. The label is what shows on the panel; leave it blank to use the name of the zone.</p>
   <div id="wzgrid"></div>
@@ -355,7 +362,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="audio.hourly_half" type="checkbox">One chime on the half hour too</label>
   <label class="chk"><input data-k="audio.hourly_speak" type="checkbox">Speak the time after the chime</label>
   <label>Hourly sound<select data-k="audio.hourly_style"><option value="two_tone">Two tone</option><option value="triple_beep">Triple beep</option><option value="chirp">Chirp</option><option value="alarm_beeps">Alarm clock beeps</option><option value="doorbell">Doorbell</option><option value="arpeggio">Arpeggio</option><option value="sonar">Sonar ping</option><option value="sos">Morse SOS</option><option value="siren_hilo">Siren: hi-lo</option><option value="siren_wail">Siren: wail</option><option value="siren_yelp">Siren: yelp</option><option value="nws_1050">NOAA 1050 Hz warning tone</option><option value="eas_attention">EAS attention signal</option><option value="eas_full">EAS with data bursts</option><option value="none">None</option></select></label>
- </div><div class="row"><button class="btn" onclick="save('audio')">Save</button><span class="msg" id="msg-hourly"></span></div>
+ </div><div class="row"><button class="btn" onclick="save('audio','hourly')">Save</button><span class="msg" id="msg-hourly"></span></div>
   <p class="msg">Quiet hours silence the hourly chime, so it will not wake you. It also stays quiet while an alarm is ringing or snoozed.</p></div>
  <div class="card"><h2>Spoken announcements</h2><div class="grid">
   <label class="chk"><input data-k="audio.speech.enabled" type="checkbox">Speak after the chime</label>
@@ -484,11 +491,11 @@ async function saveKeys(prefix,msgId){const o={};$$('[data-k^="'+prefix+'."]').f
 function say(id,txt,cls){const m=$('#msg-'+id);if(!m)return;m.textContent=txt;m.className='msg '+(cls||'');}
 async function post(url,body,form){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json'},body:form?form:(body?JSON.stringify(body):null)});
  const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)alert(j.error||('HTTP '+r.status));else setTimeout(status,800);return j;}catch(e){alert(e);}}
-async function save(section){const body=collect(section);if(section==='weather'){const t=$('#tzsel');const opt=t.selectedOptions[0];if(opt&&opt.dataset.posix&&body.time.tz_posix===opt.dataset.posix)delete body.time.tz_posix;}
- say(section,'saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();
- if(!r.ok||!j.ok){say(section,j.error||('HTTP '+r.status),'bad');return;}
- say(section,'saved'+(j.reboot_required&&j.reboot_required.length?' — reboot required for: '+j.reboot_required.join(', '):''),j.reboot_required&&j.reboot_required.length?'warn':'ok');
- loadConfig();}catch(e){say(section,String(e),'bad');}}
+async function save(section,msgId){const m=msgId||section;const body=collect(section);if(section==='weather'){const t=$('#tzsel');const opt=t.selectedOptions[0];if(opt&&opt.dataset.posix&&body.time.tz_posix===opt.dataset.posix)delete body.time.tz_posix;}
+ say(m,'saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();
+ if(!r.ok||!j.ok){say(m,j.error||('HTTP '+r.status),'bad');return;}
+ say(m,'saved'+(j.reboot_required&&j.reboot_required.length?' — reboot required for: '+j.reboot_required.join(', '):''),j.reboot_required&&j.reboot_required.length?'warn':'ok');
+ loadConfig();}catch(e){say(m,String(e),'bad');}}
 // The whole zone table is its own endpoint: 78 zones is far too much to carry in /api/config, which every page load
 // fetches and the restore path posts back whole. Static, so once per page is enough.
 let tzAll=[];
