@@ -14,7 +14,7 @@ namespace renderer {
   void tickLower(Canvas& c, uint32_t now_ms);
   bool stepLower(int8_t dir);                 // +1 / -1: show the next / previous lower-half screen now
   void requestTest(uint32_t hold_ms);
-  bool requestFullScreen(const char* name);   // "forecast", "hourly" (two page periods) or "radar" (radar.show_sec)
+  bool requestFullScreen(const char* name);   // "forecast", "hourly", "world", "xbox" (two page periods) or "radar" (radar.show_sec)
   const char* fullScreenBlockReason();        // "" when the periodic full screens can appear, else why not
   void setOta(bool active, uint8_t pct);
   void showIp(uint32_t hold_ms);

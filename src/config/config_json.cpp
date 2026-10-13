@@ -635,6 +635,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint32_t& changed, Stri
     if (!getStr(o, "gamertag", xb.gamertag, t, err)) return false;
     if (!getBool(o, "banners", xb.banners, t, err)) return false;
     if (!getBool(o, "friends", xb.friends, t, err)) return false;
+    if (!getBool(o, "screen", xb.screen, t, err)) return false;
     if (t) changed |= CHG_XBOX;
   }
 
@@ -1014,6 +1015,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["gamertag"] = c.xbox.gamertag;
   o["banners"] = c.xbox.banners;
   o["friends"] = c.xbox.friends;
+  o["screen"] = c.xbox.screen;
 
   dst["first_boot"] = c.first_boot;
 }

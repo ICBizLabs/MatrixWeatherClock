@@ -4,7 +4,7 @@
 #include "config/config.h"
 
 // Xbox player stats through OpenXBL (https://xbl.io), a free proxy for the Xbox Live web API that only needs an API
-// key. Follows one gamertag: gamerscore, online / now playing, the latest achievement and how many friends are
+// key. Follows one gamertag: gamerscore, online / now playing, the latest achievements and how many friends are
 // online. Presence and friends refresh every 5 minutes, gamerscore and achievements every 15, about 40 requests an
 // hour against the free tier's 150.
 namespace xbox {
@@ -16,9 +16,10 @@ namespace xbox {
     char game[40] = "";              // the title in the foreground while online, "" = none or the home screen
     int16_t friends_online = -1;     // -1 = not known (private list or switched off)
     char friend_names[3][16] = {};
-    char achievement[48] = "";       // newest unlocked achievement
-    char achievement_game[40] = "";
-    time_t achievement_t = 0;
+    struct Achievement { char name[48] = ""; char game[40] = ""; time_t t = 0; };
+    static constexpr uint8_t MAX_RECENT = 5;
+    Achievement recent[MAX_RECENT];  // newest unlocks first, from the most recently played games
+    uint8_t nrecent = 0;
   };
   struct Status {
     bool enabled;

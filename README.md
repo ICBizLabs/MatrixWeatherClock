@@ -63,7 +63,7 @@ taking turns underneath. See [4-inch LCD board](#4-inch-lcd-board). A third buil
   own script can react without an account. The two JSON field names are configurable to match the service.
 - **Moon phase**: a page with the moon drawn as it looks tonight, the phase name, how much is lit and the days to the
   next full or new moon, computed on the clock from the date alone.
-- **Xbox player**: gamerscore, online status and the game being played, the newest achievement and friends online
+- **Xbox player**: gamerscore, online status and the game being played, the latest achievements and friends online
   for any gamertag, through the free OpenXBL service, with a scrolling line when the player comes online or unlocks
   an achievement.
 - **Tides**: the next high and low water from NOAA's tide predictions for the station you pick, with a rising or
@@ -379,7 +379,7 @@ IP address once online). After every WiFi connection the IP address is shown for
 The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
 thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
 storm watch, an alarm, a running and a finished timer, a message, the holiday themes, night mode, the indoor sensor,
-air-quality, barometer, tide and moon pages, the Xbox page (a player online, then an achievement unlocking) and a radar loop with a synthetic storm. It uses made-up
+air-quality, barometer, tide and moon pages, the Xbox page and achievements screen and a radar loop with a synthetic storm. It uses made-up
 data, turns itself off after the chosen number of minutes, and the wheel push ends it early. It is silent unless
 "with sounds" is ticked, in which case the alert, lightning, alarm, timer and message scenarios play their chimes even
 during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
@@ -488,16 +488,23 @@ gamertag on the Location & Weather tab under **Xbox player**. Any public gamerta
 *Test key* checks the key before you save it and shows the gamertag of the account it belongs to.
 
 The **xbox** page shows the gamertag with a green dot while the player is online, and below it, every few seconds:
-the gamerscore, the game being played (or OFFLINE), how many friends are online, and the newest achievement. With
+the gamerscore, the game being played (or OFFLINE), how many friends are online, and the newest achievement.
+The **latest achievements** screen lists the newest unlocks from the three most recently played games, each with how
+long ago it happened (`5M`, `3H`, `2D`), under the gamertag and gamerscore. It takes its turn with the forecast and the
+other full screens (on the 4-inch LCD, below the clock), and *Show achievements* puts it up straight away. With
 *Scroll a line* ticked, the clock also scrolls a message when the player comes online or unlocks an achievement.
 Presence and friends refresh every 5 minutes and gamerscore and achievements every 15, about 40 requests an hour
-against the free tier's 150. The Status tab shows the same details and the requests used this hour, with a
+against the free tier's 150; a game's achievement list is only fetched again when its count goes up.
+
+Any gamertag works, not only your own, as far as that player's privacy settings allow: gamerscore and achievements
+are public for most players, online status is hidden for anyone who appears offline, and friends lists are usually
+private, which just leaves that line out. The Status tab shows the same details and the requests used this hour, with a
 *Refresh now* button. A player who keeps their friends list private simply has no friends line.
 
 The API key is shown as `***` in the web UI and in `/api/config`, but a settings backup holds it in full. The limit
 belongs to the key, so several clocks sharing one key share the 150 requests; give each clock its own key, or follow
-the player on one clock only. Demo mode has two Xbox scenes (a player online, then an achievement unlocking) that need
-no key.
+the player on one clock only. Demo mode has three Xbox scenes (a player online, an achievement unlocking, the achievements
+screen) that need no key.
 
 ## Indoor sensor
 

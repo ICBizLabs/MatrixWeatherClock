@@ -22,8 +22,6 @@ namespace xbox {
     char xuid[24] = "";                       // Xbox user id for the gamertag, looked up once; every other request needs it
     uint32_t nextFast = 0, nextSlow = 0, hourStart = 0;
     bool polledOnce = false;                   // banners only after the first full poll, so a boot stays quiet
-    char lastTitleId[16] = "";                // game and achievement count seen last time, so the per-game list is
-    uint16_t lastTitleCount = 0xFFFF;          // only fetched when something new unlocked
     volatile bool refreshReq = false, resetReq = false;   // set from the web task, acted on in the network task
 
     bool take() { return mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(100)) == pdTRUE; }
@@ -51,8 +49,11 @@ namespace xbox {
       return (time_t)(days_from_civil(Y, (unsigned)M, (unsigned)D) * 86400LL + h * 3600 + m * 60 + sec);
     }
 
-    // GET a path under the API into doc, keeping only what filter names (filter may be null for small replies)
-    bool call(const AppConfig& cfg, const String& path, JsonDocument& doc, const JsonDocument* filter, int& code) {
+    // GET a path under the API into doc, keeping only what filter names (filter may be null for small replies).
+    // A big reply (a long game history, a busy player's friends list) can break off part way; with partial set, what
+    // arrived before the break is used, which suits a list that comes newest first.
+    bool call(const AppConfig& cfg, const String& path, JsonDocument& doc, const JsonDocument* filter, int& code,
+              bool partial = false) {
       http_util::Options opt;
       opt.userAgent = MWC_USER_AGENT_NAME "/" MWC_VERSION;
       opt.accept = "application/json";
@@ -65,13 +66,17 @@ namespace xbox {
       String err;
       code = 0;
       // OpenXBL wraps the Xbox Live reply in {"content": ...}; the filter allows both, and the wrapper is dropped
+      DeserializationError jerr = DeserializationError::Ok;
       JsonDocument wrapped;
       if (filter) { wrapped.set(*filter); wrapped["content"] = *filter; }
-      bool ok = http_util::get(String(API) + path, opt, [&](Stream& s, int) {
+      bool ok = http_util::get(String(API) + path, opt, [&](Stream& s, int len) {
         DeserializationError e = filter ? deserializeJson(doc, s, DeserializationOption::Filter(wrapped))
                                         : deserializeJson(doc, s);
-        return e == DeserializationError::Ok;
+        jerr = e;
+        return e == DeserializationError::Ok || (partial && e == DeserializationError::IncompleteInput && doc.size());
       }, err, &code);
+      if (ok && jerr != DeserializationError::Ok) LOGI("xbox: %s broke off, using the part that arrived", path.c_str());
+      if (!ok && jerr != DeserializationError::Ok) err = String("reply not read: ") + jerr.c_str();
       if (ok && !doc["content"].isNull()) { JsonDocument inner(psramAllocator()); inner.set(doc["content"]); doc = std::move(inner); }
       if (!ok) {
         if (code == 429) err = "rate limited (150 requests an hour)";
@@ -81,21 +86,24 @@ namespace xbox {
       return ok;
     }
 
-    // gamertag -> XUID (the search answers with a profile, like /account), also picking up the gamertag as Xbox spells it
+    // gamertag -> XUID, also picking up the gamertag as Xbox spells it. The search answers in one of two shapes:
+    // a profile like /account (profileUsers[0].id) or a people list (people[0].xuid); both are accepted.
     bool lookup(const AppConfig& cfg) {
-      JsonDocument filter;
-      filter["profileUsers"][0]["id"] = true;
-      filter["profileUsers"][0]["settings"][0]["id"] = true;
-      filter["profileUsers"][0]["settings"][0]["value"] = true;
-      JsonDocument doc(psramAllocator());
+      JsonDocument doc(psramAllocator());      // a small reply (about 1.4 KB), so it is read whole
       int code;
-      if (!call(cfg, String("/friends/search?gt=") + urlEncode(cfg.xbox.gamertag), doc, &filter, code)) return false;
-      const char* x = doc["profileUsers"][0]["id"] | "";
-      if (!x[0]) { fail("gamertag not found"); return false; }
+      if (!call(cfg, String("/friends/search?gt=") + urlEncode(cfg.xbox.gamertag), doc, nullptr, code)) return false;
+      const char* x = doc["profileUsers"][0]["id"] | (doc["people"][0]["xuid"] | "");
+      if (!x[0]) {
+        String body; serializeJson(doc, body);
+        LOGW("xbox: search for %s answered %.200s", cfg.xbox.gamertag, body.c_str());
+        fail("gamertag not found");
+        return false;
+      }
       strlcpy(xuid, x, sizeof(xuid));
-      const char* gt = cfg.xbox.gamertag;
+      const char* gt = doc["people"][0]["gamertag"] | cfg.xbox.gamertag;
       JsonArrayConst settings = doc["profileUsers"][0]["settings"];
       for (JsonVariantConst s : settings) if (!strcmp(s["id"] | "", "Gamertag") && (s["value"] | "")[0]) gt = s["value"];
+      if (!gt[0]) gt = cfg.xbox.gamertag;
       if (take()) { strlcpy(st.xuid, xuid, sizeof(st.xuid)); strlcpy(data.gamertag, gt, sizeof(data.gamertag)); give(); }
       LOGI("xbox: %s is xuid %s", cfg.xbox.gamertag, xuid);
       return true;
@@ -164,11 +172,47 @@ namespace xbox {
       return true;
     }
 
-    // The title history comes newest first. Its achievement count only moves when something unlocks, and only then
-    // is that game's list fetched to find the newest unlock.
-    void fetchAchievement(const AppConfig& cfg, Data& d) {
-      char titleId[16] = "", game[40] = "";
+    // The newest unlocks from the three most recently played games that have achievements. A game's achievement
+    // count only moves when something unlocks, and only then is that game's list fetched again, so a quiet poll
+    // costs the one title-history request.
+    constexpr uint8_t MAX_TITLES = 3;
+    struct TitleCache {
+      char id[16] = "";
+      char game[40] = "";
       uint16_t count = 0;
+      uint8_t n = 0;
+      struct { char name[48]; time_t t; } a[Data::MAX_RECENT];
+    };
+    TitleCache tcache[MAX_TITLES];
+
+    // one game's newest unlocks into tc (false when the request fails)
+    bool fetchTitle(const AppConfig& cfg, TitleCache& tc) {
+      JsonDocument filter;
+      filter["achievements"][0]["name"] = true;
+      filter["achievements"][0]["progressState"] = true;
+      filter["achievements"][0]["progression"]["timeUnlocked"] = true;
+      JsonDocument doc(psramAllocator());
+      int code;
+      if (!call(cfg, String("/achievements/player/") + xuid + "/" + tc.id, doc, &filter, code, true)) return false;
+      tc.n = 0;
+      JsonArrayConst list = doc["achievements"];
+      for (JsonVariantConst a : list) {
+        if (strcmp(a["progressState"] | "", "Achieved")) continue;
+        const time_t t = parseIso(a["progression"]["timeUnlocked"] | "");
+        if (!t) continue;
+        // insertion into a short list kept newest first
+        uint8_t k = tc.n < Data::MAX_RECENT ? tc.n++ : Data::MAX_RECENT;
+        if (k == Data::MAX_RECENT) { if (t <= tc.a[k - 1].t) continue; k--; }
+        while (k > 0 && tc.a[k - 1].t < t) { tc.a[k] = tc.a[k - 1]; k--; }
+        strlcpy(tc.a[k].name, a["name"] | "", sizeof(tc.a[k].name));
+        tc.a[k].t = t;
+      }
+      return true;
+    }
+
+    void fetchAchievements(const AppConfig& cfg, Data& d) {
+      TitleCache next[MAX_TITLES];
+      uint8_t nt = 0;
       {
         JsonDocument filter;
         filter["titles"][0]["titleId"] = true;
@@ -177,41 +221,46 @@ namespace xbox {
         filter["titles"][0]["titleHistory"]["lastTimePlayed"] = true;
         JsonDocument doc(psramAllocator());
         int code;
-        if (!call(cfg, String("/achievements/player/") + xuid, doc, &filter, code)) return;
-        time_t best = 0;
+        if (!call(cfg, String("/achievements/player/") + xuid, doc, &filter, code, true)) return;
+        time_t played[MAX_TITLES] = {};
         JsonArrayConst titles = doc["titles"];
-        for (JsonVariantConst t : titles) {
-          const time_t played = parseIso(t["titleHistory"]["lastTimePlayed"] | "");
-          if ((t["achievement"]["currentAchievements"] | 0) == 0 || played <= best) continue;
-          best = played;
-          strlcpy(titleId, t["titleId"] | "", sizeof(titleId));
-          strlcpy(game, t["name"] | "", sizeof(game));
-          count = t["achievement"]["currentAchievements"] | 0;
+        for (JsonVariantConst t : titles) {       // keep the three most recently played, newest first
+          const uint16_t count = t["achievement"]["currentAchievements"] | 0;
+          const time_t p = parseIso(t["titleHistory"]["lastTimePlayed"] | "");
+          if (!count || !p) continue;
+          uint8_t k = nt < MAX_TITLES ? nt++ : MAX_TITLES;
+          if (k == MAX_TITLES) { if (p <= played[k - 1]) continue; k--; }
+          while (k > 0 && played[k - 1] < p) { next[k] = next[k - 1]; played[k] = played[k - 1]; k--; }
+          next[k] = TitleCache();
+          strlcpy(next[k].id, t["titleId"] | "", sizeof(next[k].id));
+          strlcpy(next[k].game, t["name"] | "", sizeof(next[k].game));
+          next[k].count = count;
+          played[k] = p;
         }
       }
-      if (!titleId[0]) return;
-      if (!strcmp(titleId, lastTitleId) && count == lastTitleCount && d.achievement[0]) return;   // nothing new
-      JsonDocument filter;
-      filter["achievements"][0]["name"] = true;
-      filter["achievements"][0]["progressState"] = true;
-      filter["achievements"][0]["progression"]["timeUnlocked"] = true;
-      JsonDocument doc(psramAllocator());
-      int code;
-      if (!call(cfg, String("/achievements/player/") + xuid + "/" + titleId, doc, &filter, code)) return;
-      time_t best = 0;
-      JsonArrayConst list = doc["achievements"];
-      for (JsonVariantConst a : list) {
-        if (strcmp(a["progressState"] | "", "Achieved")) continue;
-        const time_t t = parseIso(a["progression"]["timeUnlocked"] | "");
-        if (t <= best) continue;
-        best = t;
-        strlcpy(d.achievement, a["name"] | "", sizeof(d.achievement));
+      for (uint8_t i = 0; i < nt; i++) {
+        const TitleCache* old = nullptr;
+        for (const TitleCache& c : tcache) if (c.id[0] && !strcmp(c.id, next[i].id)) old = &c;
+        if (old && old->count == next[i].count) { next[i] = *old; continue; }   // nothing new in this game
+        TitleCache fresh = next[i];
+        if (fetchTitle(cfg, fresh)) next[i] = fresh;
+        else if (old) next[i] = *old;                                               // keep what we had; retry next poll
+        else next[i].count = 0;                                                     // forces a retry next poll
       }
-      if (!best) return;
-      d.achievement_t = best;
-      strlcpy(d.achievement_game, game, sizeof(d.achievement_game));
-      strlcpy(lastTitleId, titleId, sizeof(lastTitleId));
-      lastTitleCount = count;
+      for (uint8_t i = 0; i < MAX_TITLES; i++) tcache[i] = i < nt ? next[i] : TitleCache();
+      // merge the games' lists into the newest MAX_RECENT overall
+      d.nrecent = 0;
+      for (const TitleCache& c : tcache) {
+        for (uint8_t j = 0; j < c.n; j++) {
+          const time_t t = c.a[j].t;
+          uint8_t k = d.nrecent < Data::MAX_RECENT ? d.nrecent++ : Data::MAX_RECENT;
+          if (k == Data::MAX_RECENT) { if (t <= d.recent[k - 1].t) continue; k--; }
+          while (k > 0 && d.recent[k - 1].t < t) { d.recent[k] = d.recent[k - 1]; k--; }
+          strlcpy(d.recent[k].name, c.a[j].name, sizeof(d.recent[k].name));
+          strlcpy(d.recent[k].game, c.game, sizeof(d.recent[k].game));
+          d.recent[k].t = t;
+        }
+      }
     }
 
     // Scroll a line when the player comes online or a newer achievement appears. Not on the first poll after boot
@@ -225,8 +274,9 @@ namespace xbox {
         renderer::showMessage(line, BANNER_MS, BANNER_RGB);
         LOGI("xbox: %s", line);
       }
-      if (after.achievement_t > before.achievement_t && before.achievement_t) {
-        snprintf(line, sizeof(line), "%s unlocked %s (%s)", after.gamertag, after.achievement, after.achievement_game);
+      // a newer unlock than before, and a recent one: a game whose list only now loaded is not news
+      if (after.nrecent && (!before.nrecent || after.recent[0].t > before.recent[0].t) && after.recent[0].t > time(nullptr) - 86400) {
+        snprintf(line, sizeof(line), "%s unlocked %s (%s)", after.gamertag, after.recent[0].name, after.recent[0].game);
         renderer::showMessage(line, BANNER_MS, BANNER_RGB);
         LOGI("xbox: %s", line);
       }
@@ -247,8 +297,8 @@ namespace xbox {
     st.enabled = cfg.xbox.enabled && cfg.xbox.api_key[0] && cfg.xbox.gamertag[0];
     if (resetReq) {                            // settings changed: forget the player and start over
       resetReq = false;
-      xuid[0] = lastTitleId[0] = '\0';
-      lastTitleCount = 0xFFFF;
+      xuid[0] = '\0';
+      for (auto& c : tcache) c = TitleCache();
       polledOnce = false;
       if (take()) { data = Data(); st.valid = false; st.xuid[0] = '\0'; st.err[0] = '\0'; give(); }
       nextFast = nextSlow = millis();
@@ -274,7 +324,7 @@ namespace xbox {
     }
     if (doSlow && ok) {
       ok = fetchAccount(cfg, d);
-      if (ok) fetchAchievement(cfg, d);
+      if (ok) fetchAchievements(cfg, d);
       nextSlow = now + (ok ? SLOW_MS : RETRY_MS);
     }
     if (!ok) return;

@@ -23,7 +23,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | GET | `/api/remote` | infrared receiver state: `{enabled, pin, received, learning, last_code, last_proto, last_ms, last_age_s}` |
 | POST | `/api/remote/learn` | record the next received code without executing it (the web UI's Learn button) |
 | GET | `/remote` | the phone remote page |
-| POST | `/api/xbox/refresh` | fetch the Xbox player's stats now; `/api/status.xbox` has `{enabled, valid, xuid, gamertag, gamerscore, online, game, friends_online, friend_names[], achievement, achievement_game, achievement_t, requests_hour, last_ok_age_s, error}` |
+| POST | `/api/xbox/refresh` | fetch the Xbox player's stats now; `/api/status.xbox` has `{enabled, valid, xuid, gamertag, gamerscore, online, game, friends_online, friend_names[], achievements[{name, game, t}] (newest first, up to 5), requests_hour, last_ok_age_s, error}` |
 | POST | `/api/tide/refresh` | fetch the tide predictions now; `/api/status.tide` has `{enabled, valid, station, unit, rising, height, next_high {t, h}, next_low {t, h}, extremes[]}` with epoch times |
 | GET | `/api/radar` | radar loop state: `{enabled, frames, error, echo_near, echo_pct, base, last_ok_age_s, age_min[]}` (`base_map`: `none`, `coast`, `landwater`, `both`; `source`: `nowcoast` (MRMS, quality controlled) or `mesonet` (unfiltered NEXRAD composite)) |
 | GET | `/api/radar/frame?i=N` | frame N (0 = oldest) as raw RGB565 little-endian 64x32 (headers `X-Frame-Size`, `X-Frame-Age-Min`) |
@@ -50,7 +50,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/demo` | `on=1|0`, `minutes=N`, `sound=1|0`, `start=N` (scenario index to begin with): cycle demo screens with sample data, auto-off after N minutes; with sound the alert, lightning, alarm, timer and message scenarios chime and every scenario says its name |
 | POST | `/api/update/check` | check the manifest for a newer version now |
 | POST | `/api/update/install` | download, verify and install the available version, then reboot |
-| POST | `/api/show` | `screen=forecast`, `screen=hourly` or `screen=radar` shows that full screen now |
+| POST | `/api/show` | `screen=forecast`, `hourly`, `radar`, `world` or `xbox` (latest achievements) shows that full screen now |
 | POST | `/api/refresh` | fetch weather and alerts now |
 | GET | `/api/wifi/scan[?start=1|?poll=1]` | start / poll an async network scan |
 | GET | `/api/log` | text log ring buffer |
@@ -82,7 +82,7 @@ Configuration keys and defaults:
                   "notify_alarms": false, "notify_air": true, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
   "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixWeatherClock/manifest.json", "check_hours": 6 },
   "radar":    { "enabled": true, "radius_km": 100, "every_n_cycles": 4, "show_when_precip": true, "precip_every_n_cycles": 2, "frame_ms": 350, "hold_ms": 1500, "show_sec": 12, "refresh_min": 5, "base_map": "both", "source": "nowcoast" },
-  "xbox":     { "enabled": true, "auto_page": true, "api_key": "***", "gamertag": "Major Nelson", "banners": true, "friends": true },
+  "xbox":     { "enabled": true, "auto_page": true, "api_key": "***", "gamertag": "Major Nelson", "banners": true, "friends": true, "screen": true },
   "tide":     { "enabled": true, "auto_page": true, "station": "8727012", "station_name": "Pithlachascotee River, FL", "unit": "auto", "refresh_hours": 6, "water_temp": true },
   "webhook":  { "enabled": false, "url": "", "title_key": "title", "body_key": "message", "header_name": "", "header_value": "",
                 "on_alerts": true, "min_severity": "Severe", "on_lightning": false, "on_alarms": false, "on_air": false, "on_boot": false },

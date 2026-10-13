@@ -287,6 +287,7 @@ struct XboxConfig {               // Xbox player stats through OpenXBL (https://
   char gamertag[16] = "";         // the player to follow
   bool banners = true;            // scroll a line when the player comes online or unlocks an achievement
   bool friends = true;            // also count the player's friends who are online
+  bool screen = true;             // the latest-achievements full screen joins the full-screen rotation
 };
 
 struct WebhookConfig {            // plain HTTP POST to a URL of your choice: ntfy, Gotify, Home Assistant, Discord

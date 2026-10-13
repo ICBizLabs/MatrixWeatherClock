@@ -272,9 +272,13 @@ namespace web {
           xo["friends_online"] = xd.friends_online;
           JsonArray fn = xo["friend_names"].to<JsonArray>();
           for (auto& n : xd.friend_names) if (n[0]) fn.add(n);
-          xo["achievement"] = xd.achievement;
-          xo["achievement_game"] = xd.achievement_game;
-          xo["achievement_t"] = (long)xd.achievement_t;
+          JsonArray ra = xo["achievements"].to<JsonArray>();     // newest first
+          for (uint8_t i = 0; i < xd.nrecent; i++) {
+            JsonObject a = ra.add<JsonObject>();
+            a["name"] = xd.recent[i].name;
+            a["game"] = xd.recent[i].game;
+            a["t"] = (long)xd.recent[i].t;
+          }
         }
       }
       {

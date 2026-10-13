@@ -34,7 +34,7 @@
 namespace renderer {
   namespace {
     using namespace layout;
-    enum class Screen : uint8_t { Splash, Composite, Forecast, Hourly, Radar, World, Test };
+    enum class Screen : uint8_t { Splash, Composite, Forecast, Hourly, Radar, World, Xbox, Test };
     Screen screen = Screen::Splash;
     uint32_t screenUntil = 0, testStart = 0;
     bool otaActive = false;
@@ -494,9 +494,16 @@ namespace renderer {
       strlcpy(demoXbox.game, "Halo Infinite", sizeof(demoXbox.game));
       demoXbox.friends_online = 3;
       strlcpy(demoXbox.friend_names[0], "Larry Hryb", sizeof(demoXbox.friend_names[0]));
-      strlcpy(demoXbox.achievement, achievement ? "Legendary Finish" : "Spartan Ready", sizeof(demoXbox.achievement));
-      strlcpy(demoXbox.achievement_game, "Halo Infinite", sizeof(demoXbox.achievement_game));
-      demoXbox.achievement_t = time(nullptr) - (achievement ? 0 : 3 * 86400);
+      static const struct { const char* name; const char* game; long ago; } LIST[] = {
+        { "Legendary Finish", "Halo Infinite", 0 }, { "Spartan Ready", "Halo Infinite", 3 * 86400L },
+        { "Rocket Racer", "Forza Horizon 5", 5 * 86400L + 7200 }, { "Getting Started", "Minecraft", 12 * 86400L } };
+      const time_t now = time(nullptr);
+      for (uint8_t i = achievement ? 0 : 1; i < 4 && demoXbox.nrecent < xbox::Data::MAX_RECENT; i++) {
+        xbox::Data::Achievement& a = demoXbox.recent[demoXbox.nrecent++];
+        strlcpy(a.name, LIST[i].name, sizeof(a.name));
+        strlcpy(a.game, LIST[i].game, sizeof(a.game));
+        a.t = now - LIST[i].ago - 60;
+      }
     }
     // gamertag and an online dot on top; below, every 3 s (2 s in the demo, so one demo step shows all four):
     // gamerscore, what they are playing, friends online and the latest achievement
@@ -522,7 +529,7 @@ namespace renderer {
         else snprintf(lines[n], sizeof(lines[n]), "%d FRIEND%s ON", d.friends_online, d.friends_online == 1 ? "" : "S");
         cols[n++] = colText();
       }
-      if (d.achievement[0]) { snprintf(lines[n], sizeof(lines[n]), "%s", d.achievement); cols[n++] = C_ORANGE; }
+      if (d.nrecent) { snprintf(lines[n], sizeof(lines[n]), "%s", d.recent[0].name); cols[n++] = C_ORANGE; }
       const uint8_t slot = (uint8_t)((now / (demo.on ? 2000 : 3000)) % n);
       drawFitted(pc, lines[slot], 1, Y_L2, W - 2, cols[slot]);
     }
@@ -817,7 +824,7 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
-    constexpr uint8_t DEMO_COUNT = 30;
+    constexpr uint8_t DEMO_COUNT = 31;
     void buildDemoRadar();
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
@@ -874,6 +881,7 @@ namespace renderer {
         case 28: demo.name = "xbox";       demo.page = PAGE_XBOX; buildDemoXbox(false); break;
         case 29: demo.name = "xbox achievement"; demo.page = PAGE_XBOX; buildDemoXbox(true);
                  showMessage("Major Nelson unlocked Legendary Finish (Halo Infinite)", DEMO_STEP_MS, 0x20E020); break;
+        case 30: demo.name = "xbox achievements"; demo.screen = Screen::Xbox; buildDemoXbox(true); break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
@@ -882,7 +890,7 @@ namespace renderer {
         "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
         "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
         "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer", "tide", "moon",
-        "xbox", "achievement unlocked" };
+        "xbox", "achievement unlocked", "xbox" };
       demo.lastRing = 0;
       if (demo.sound) {
         demo.soundPending = true;
@@ -1062,10 +1070,48 @@ namespace renderer {
       if (!row) c.drawTextCentered("NO ZONES SET", W / 2, 13, C_GREY);
     }
 
+    // Latest achievements: the gamertag and gamerscore on top, then the newest unlocks with how long ago, one a row
+    bool xboxScreenReady() {
+      if (demo.on) return demoXbox.nrecent > 0;
+      xbox::Data d;
+      return g_cfg.xbox.enabled && g_cfg.xbox.screen && xbox::get(d) && d.nrecent > 0;
+    }
+    void drawXboxScreen(Canvas& c) {
+      xbox::Data d;
+      if (demo.on) d = demoXbox;
+      else if (!xbox::get(d)) return;
+      tinyFont(c);
+      char right[16];
+      snprintf(right, sizeof(right), "%luG", (unsigned long)d.gamerscore);
+      c.drawTextRight(right, W - 1, 0, colTemp());
+      char gt[sizeof(d.gamertag)];
+      strlcpy(gt, d.gamertag, sizeof(gt));
+      while (gt[0] && c.textWidth(gt) > W - 4 - c.textWidth(right)) gt[strlen(gt) - 1] = '\0';
+      c.drawText(gt, 1, 0, Canvas::rgb(0x20E020));
+      const time_t now = time(nullptr);
+      for (uint8_t i = 0; i < d.nrecent && (int16_t)((i + 1) * 8) < H; i++) {
+        const int16_t y = (int16_t)((i + 1) * 8);
+        const long ago = now > 1700000000 ? (long)(now - d.recent[i].t) : -1;   // clock not set: no age
+        right[0] = '\0';
+        if (ago >= 0) {
+          if (ago < 3600) snprintf(right, sizeof(right), "%ldM", max(1L, ago / 60));
+          else if (ago < 86400) snprintf(right, sizeof(right), "%ldH", ago / 3600);
+          else if (ago < 365 * 86400L) snprintf(right, sizeof(right), "%ldD", ago / 86400);
+          else snprintf(right, sizeof(right), "%ldY", ago / (365 * 86400L));
+          c.drawTextRight(right, W - 1, y, C_GREY);
+        }
+        char nm[sizeof(d.recent[i].name)];
+        strlcpy(nm, d.recent[i].name, sizeof(nm));
+        const int16_t avail = (int16_t)(W - 1 - (right[0] ? c.textWidth(right) + 3 : 0));
+        while (nm[0] && c.textWidth(nm) > avail) nm[strlen(nm) - 1] = '\0';   // a long name shortens, it never collides
+        c.drawText(nm, 1, y, i == 0 ? C_ORANGE : colText());
+      }
+    }
+
     // One predicate and one switch, used by both places that hand the panel to a full screen. They used to be a
     // hand-copied condition and ternary chain each, which is how a new screen ends up rendering as a radar loop.
     bool isFullScreen(Screen s) {
-      return s == Screen::Forecast || s == Screen::Hourly || s == Screen::Radar || s == Screen::World;
+      return s == Screen::Forecast || s == Screen::Hourly || s == Screen::Radar || s == Screen::World || s == Screen::Xbox;
     }
     void drawFullScreen(Canvas& c, uint32_t now) {
       switch (screen) {
@@ -1073,6 +1119,7 @@ namespace renderer {
         case Screen::Hourly: drawHourly(c); break;
         case Screen::Radar: drawRadar(c, now); break;
         case Screen::World: drawWorldScreen(c); break;
+        case Screen::Xbox: drawXboxScreen(c); break;
         default: break;      // unreachable: isFullScreen() is the only gate. Draws nothing rather than guessing.
       }
     }
@@ -1145,13 +1192,15 @@ namespace renderer {
     }
 
     // ---- lower half (square LCD) ----
-    constexpr Screen LOWER_ORDER[4] = { Screen::Forecast, Screen::Hourly, Screen::World, Screen::Radar };
+    constexpr uint8_t N_LOWER = 5;
+    constexpr Screen LOWER_ORDER[N_LOWER] = { Screen::Forecast, Screen::Hourly, Screen::World, Screen::Xbox, Screen::Radar };
     bool lowerUsable(Screen s) {
       const DisplayConfig& d = g_cfg.display;
       switch (s) {
         case Screen::Forecast: return d.forecast_page && wx.valid && wx.ndaily > 0;
         case Screen::Hourly:   return d.hourly_page && wx.valid && wx.nhourly >= 2;
         case Screen::World:    return g_cfg.world.enabled && worldReady();
+        case Screen::Xbox:     return xboxScreenReady();
         case Screen::Radar:    return screen != Screen::Radar && !night && radarAvailable();   // one radar loop at a time
         default:               return false;
       }
@@ -1189,12 +1238,13 @@ namespace renderer {
   bool stepLower(int8_t dir) {
     if (!lowerOn) return false;
     int8_t cur = -1;
-    for (int8_t i = 0; i < 4; i++) if (LOWER_ORDER[i] == lowerScreen) cur = i;
-    if (cur < 0) cur = dir > 0 ? 3 : 0;               // nothing shown yet: start from the first (or last) one
-    for (int8_t k = 1; k <= 4; k++) {
-      const Screen s = LOWER_ORDER[((cur + dir * k) % 4 + 4) % 4];
+    constexpr int8_t N = (int8_t)N_LOWER;
+    for (int8_t i = 0; i < N; i++) if (LOWER_ORDER[i] == lowerScreen) cur = i;
+    if (cur < 0) cur = dir > 0 ? N - 1 : 0;           // nothing shown yet: start from the first (or last) one
+    for (int8_t k = 1; k <= N; k++) {
+      const Screen s = LOWER_ORDER[((cur + dir * k) % N + N) % N];
       if (!lowerUsable(s)) continue;
-      lowerTurn = (uint8_t)((((cur + dir * k) % 4 + 4) % 4 + 1) % 4);   // the automatic rotation carries on from here
+      lowerTurn = (uint8_t)((((cur + dir * k) % N + N) % N + 1) % N);   // the automatic rotation carries on from here
       lowerShow(s, millis());
       return true;
     }
@@ -1226,10 +1276,10 @@ namespace renderer {
       const Screen* order = LOWER_ORDER;
       Screen pick = Screen::Composite;
       if (precip && lowerScreen != Screen::Radar && g_cfg.radar.show_when_precip) pick = Screen::Radar;
-      for (uint8_t k = 0; k < 4 && pick == Screen::Composite; k++) {
-        const Screen s = order[(lowerTurn + k) % 4];
+      for (uint8_t k = 0; k < N_LOWER && pick == Screen::Composite; k++) {
+        const Screen s = order[(lowerTurn + k) % N_LOWER];
         if (s == Screen::Radar && !precip && !g_cfg.radar.every_n_cycles) continue;   // radar only when asked for
-        if (usable(s)) { pick = s; lowerTurn = (uint8_t)((lowerTurn + k + 1) % 4); }
+        if (usable(s)) { pick = s; lowerTurn = (uint8_t)((lowerTurn + k + 1) % N_LOWER); }
       }
       lowerShow(pick, now);
     }
@@ -1238,6 +1288,7 @@ namespace renderer {
       case Screen::Hourly: drawHourly(c); break;
       case Screen::Radar: drawRadar(c, now); break;
       case Screen::World: drawWorldScreen(c); break;
+      case Screen::Xbox: drawXboxScreen(c); break;
       default: break;
     }
   }
@@ -1258,6 +1309,11 @@ namespace renderer {
       startFullScreen(Screen::World, millis());
       return true;
     }
+    if (!strcmp(name, "xbox")) {
+      if (!xboxScreenReady()) return false;
+      startFullScreen(Screen::Xbox, millis());
+      return true;
+    }
     if (!wx.valid) return false;                           // everything below this line needs weather; the world clock does not
     if (!strcmp(name, "forecast") && wx.ndaily) screen = Screen::Forecast;
     else if (!strcmp(name, "hourly") && wx.nhourly >= 2) screen = Screen::Hourly;
@@ -1268,7 +1324,7 @@ namespace renderer {
 
   const char* fullScreenBlockReason() {
     const DisplayConfig& d = g_cfg.display;
-    const bool worldOk = g_cfg.world.enabled && worldReady();
+    const bool worldOk = (g_cfg.world.enabled && worldReady()) || xboxScreenReady();   // screens that need no weather
     if (!d.forecast_page && !d.hourly_page && !g_cfg.radar.enabled && !worldOk) return "all full screens disabled";
     if (!wx.valid && !worldOk) return "no weather data yet";
     if (alarmclock::ringing()) return "alarm ringing";
@@ -1357,6 +1413,7 @@ namespace renderer {
       case Screen::Hourly: return "hourly";
       case Screen::Radar: return "radar";
       case Screen::World: return "world";
+      case Screen::Xbox: return "xbox";
       case Screen::Test: return "test";
       default: return demo.on ? "demo" : alarmclock::ringing() ? "alarm" : av.n ? "alert" : msg.active ? "message" : "clock";
     }
@@ -1461,12 +1518,13 @@ namespace renderer {
               startRadar(now);
             } else if (!interrupt && !night && cyclesSinceFull >= d.forecast_every_n_cycles) {
               // round-robin over the enabled full screens: forecast, hourly graph, radar
-              constexpr uint8_t MAX_FULL_CAND = 4;    // forecast, hourly, radar, world -- keep in step with the pushes
+              constexpr uint8_t MAX_FULL_CAND = 5;    // forecast, hourly, radar, world, xbox -- keep in step with the pushes
               Screen cand[MAX_FULL_CAND]; uint8_t nc = 0;
               if (d.forecast_page && wx.valid && wx.ndaily && nc < MAX_FULL_CAND) cand[nc++] = Screen::Forecast;
               if (d.hourly_page && wx.valid && wx.nhourly >= 2 && nc < MAX_FULL_CAND) cand[nc++] = Screen::Hourly;
               if (radarOk && !precip && g_cfg.radar.every_n_cycles && (cyclesSinceRadar + 1) >= g_cfg.radar.every_n_cycles / max<uint8_t>(1, d.forecast_every_n_cycles) && nc < MAX_FULL_CAND) cand[nc++] = Screen::Radar;
               if (g_cfg.world.enabled && worldReady() && cyclesSinceWorld >= g_cfg.world.every_n_cycles && nc < MAX_FULL_CAND) cand[nc++] = Screen::World;
+              if (xboxScreenReady() && nc < MAX_FULL_CAND) cand[nc++] = Screen::Xbox;
               if (nc) {
                 cyclesSinceFull = 0;
                 Screen pick = cand[fullTurn % nc];

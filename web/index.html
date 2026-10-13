@@ -165,8 +165,9 @@ progress{width:100%;height:10px}
   <label>OpenXBL API key (<a href="https://xbl.io" target="_blank" rel="noopener">xbl.io</a> → sign in → API key)<input data-k="xbox.api_key" type="password" maxlength="47"></label>
   <label class="chk"><input data-k="xbox.banners" type="checkbox">Scroll a line when the player comes online or unlocks an achievement</label>
   <label class="chk"><input data-k="xbox.friends" type="checkbox">Count friends who are online</label>
- </div><div class="row"><button class="btn" onclick="saveKeys('xbox','xbox-cfg')">Save</button><button class="btn sec" onclick="testKey('xbox','xbox.api_key','xbox-cfg')">Test key</button><span class="msg" id="msg-xbox-cfg"></span></div>
- <p class="msg">Gamerscore, online status and game, the newest achievement and friends online for any gamertag, through the free OpenXBL service (150 requests an hour; the clock uses about 40). Leave the key as *** to keep the stored one. A private friends list just leaves that line out.</p></div>
+  <label class="chk"><input data-k="xbox.screen" type="checkbox">Latest achievements screen in the full-screen rotation</label>
+ </div><div class="row"><button class="btn" onclick="saveKeys('xbox','xbox-cfg')">Save</button><button class="btn sec" onclick="testKey('xbox','xbox.api_key','xbox-cfg')">Test key</button><button class="btn sec" onclick="post('/api/show?screen=xbox')">Show achievements</button><span class="msg" id="msg-xbox-cfg"></span></div>
+ <p class="msg">Gamerscore, online status and game, the latest achievements and friends online for any gamertag, through the free OpenXBL service (150 requests an hour; the clock uses about 40). Leave the key as *** to keep the stored one. A private friends list just leaves that line out.</p></div>
  <div class="card"><h2>Indoor sensor (BME280 / BMP280 / BME680 on the I2C header)</h2><div class="grid">
   <label class="chk"><input data-k="indoor.enabled" type="checkbox">Enabled (auto-detected at 0x76 / 0x77)</label>
   <label class="chk"><input data-k="indoor.auto_page" type="checkbox">Add the "indoor" page automatically when a sensor is found</label>
@@ -707,12 +708,14 @@ function tideStatus(T){const card=$('#tide-card');if(!card)return;const on=T&&T.
   row(t,'Next high',tideTime(T.next_high.t)+' '+tideDay(T.next_high.t)+', '+T.next_high.h+' '+T.unit);row(t,'Next low',tideTime(T.next_low.t)+' '+tideDay(T.next_low.t)+', '+T.next_low.h+' '+T.unit);}
  const now=Date.now()/1000;const list=(T.extremes||[]).filter(e=>e.t>now-3600*6).slice(0,8).map(e=>(e.high?'<b>High</b> ':'Low ')+tideTime(e.t)+' '+tideDay(e.t)+' ('+e.h+' '+T.unit+')');row(t,'Coming up',list.join('<br>'));
  row(t,'Updated',T.last_ok_age_s>=0?ago(T.last_ok_age_s):'never');}
+// text from outside services goes into innerHTML escaped
+const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function xboxStatus(X){const card=$('#xbox-card');if(!card)return;const on=X&&X.enabled;card.hidden=!on;if(!on)return;const t=$('#st-xbox');t.innerHTML='';
  if(!X.valid){row(t,'Player','<span class="warn">'+(X.error?X.error:'not fetched yet')+'</span>');return;}
  row(t,'Player',X.gamertag+' <small>('+X.xuid+')</small>');row(t,'Gamerscore',X.gamerscore);
  row(t,'Status',X.online?'<span class="ok">online</span>'+(X.game?', playing '+X.game:''):'offline');
  if(X.friends_online>=0)row(t,'Friends online',X.friends_online+(X.friend_names&&X.friend_names.length?' ('+X.friend_names.join(', ')+(X.friends_online>X.friend_names.length?', …':'')+')':''));
- if(X.achievement)row(t,'Latest achievement',X.achievement+' <small>('+X.achievement_game+(X.achievement_t?', '+new Date(X.achievement_t*1000).toLocaleString():'')+')</small>');
+ (X.achievements||[]).forEach((a,i)=>row(t,i?'':'Latest achievements',esc(a.name)+' <small>('+esc(a.game)+(a.t?', '+new Date(a.t*1000).toLocaleString():'')+')</small>'));
  row(t,'Updated',(X.last_ok_age_s>=0?ago(X.last_ok_age_s):'never')+', '+X.requests_hour+' requests this hour'+(X.error?' <span class="warn">'+X.error+'</span>':''));}
 async function findTideStations(){const lat=parseFloat($('[data-k="location.lat"]').value),lon=parseFloat($('[data-k="location.lon"]').value);if(isNaN(lat)||isNaN(lon))return say('tide-cfg','set the coordinates first','bad');
  say('tide-cfg','downloading NOAA station list (2 MB)…');const box=$('#tide-stations');box.innerHTML='';
