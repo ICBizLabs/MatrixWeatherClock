@@ -35,7 +35,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/test/panel` | shows the test pattern; optional `sec=3..300` (default 10) |
 | POST | `/api/message` | `{text, seconds (0 = until cleared), color "#RRGGBB", chime, force}` scrolls a message |
 | POST | `/api/message/clear` | remove the message |
-| GET | `/api/frame` | current panel content as raw RGB565 little-endian (header `X-Frame-Size: 64x32`) |
+| GET | `/api/frame` | current panel content as raw RGB565 little-endian (header `X-Frame-Size: 64x32`; `64x64` on the 4-inch LCD, clock above the lower screen) |
 | POST | `/api/timer` | `{minutes}` or `{seconds}` starts the countdown timer |
 | POST | `/api/timer/cancel` | cancel the timer (also silences a finished one) |
 | POST | `/api/alarm/stop`, `/api/alarm/snooze` | control a ringing alarm |

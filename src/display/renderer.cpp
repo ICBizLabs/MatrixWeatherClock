@@ -478,14 +478,49 @@ namespace renderer {
       classicFont(pc);
     }
     // ---- Xbox player (OpenXBL) ----
-    // one line, in the 5x7 font when it fits and the 3x5 one otherwise, cut at the right edge
-    void drawFitted(Canvas& pc, char* s, int16_t x, int16_t y, int16_t maxW, uint16_t color) {
+    // A line too wide for its box scrolls through it instead of being cut: a second at the start, 20 px a second to
+    // the end, a second there, then over again. t is how long the line has been up, so it always starts at the start.
+    // Whatever the text pushes past the box is cleared, so draw the neighbours (age, dot, score) afterwards.
+    constexpr uint16_t MQ_PAUSE_MS = 1000, MQ_STEP_MS = 50;
+    uint32_t marqueeMs(Canvas& c, const char* s, int16_t maxW) {
+      const int16_t over = (int16_t)(c.textWidth(s) - maxW);
+      return over > 0 ? 2UL * MQ_PAUSE_MS + (uint32_t)over * MQ_STEP_MS : 0;
+    }
+    void drawMarquee(Canvas& c, const char* s, int16_t x, int16_t y, int16_t maxW, uint16_t color, uint32_t t) {
+      const uint32_t period = marqueeMs(c, s, maxW);
+      if (!period) { c.drawText(s, x, y, color); return; }
+      const int16_t over = (int16_t)(c.textWidth(s) - maxW);
+      t %= period;
+      const int16_t off = t < MQ_PAUSE_MS ? 0 : (int16_t)min<uint32_t>((uint32_t)over, (t - MQ_PAUSE_MS) / MQ_STEP_MS);
+      c.drawText(s, (int16_t)(x - off), y, color);
+      const int16_t h = (int16_t)(c.textHeight("Ag|") + 1);
+      c.fillRect(0, y, x, h, 0);
+      c.fillRect((int16_t)(x + maxW), y, (int16_t)(c.width() - x - maxW), h, 0);
+    }
+    // How long something has been on screen: restarts when it was not drawn for half a second
+    struct ShownFor {
+      uint32_t since = 0, last = 0;
+      uint32_t at(uint32_t now) { if (now - last > 500) since = now; last = now; return now - since; }
+    };
+    ShownFor xboxPageShown, xboxScreenShown;
+
+    // ---- Xbox player (OpenXBL) ----
+    // one line, in the 5x7 font when it fits, the 3x5 one when only that fits, otherwise scrolling in the 5x7 one
+    uint32_t fittedMs(Canvas& pc, const char* s, int16_t maxW) {
+      classicFont(pc);
+      if (pc.textWidth(s) <= maxW) return 0;
+      tinyFont(pc);
+      const bool tinyFits = pc.textWidth(s) <= maxW;
+      classicFont(pc);
+      return tinyFits ? 0 : marqueeMs(pc, s, maxW);
+    }
+    void drawFitted(Canvas& pc, const char* s, int16_t x, int16_t y, int16_t maxW, uint16_t color, uint32_t t) {
       classicFont(pc);
       if (pc.textWidth(s) <= maxW) { pc.drawText(s, x, y, color); return; }
       tinyFont(pc);
-      for (size_t n = strlen(s); n > 1 && pc.textWidth(s) > maxW; ) s[--n] = '\0';
-      pc.drawText(s, x, y + 1, color);
+      if (pc.textWidth(s) <= maxW) { pc.drawText(s, x, (int16_t)(y + 1), color); classicFont(pc); return; }
       classicFont(pc);
+      drawMarquee(pc, s, x, y, maxW, color, t);
     }
     xbox::Data demoXbox;
     void buildDemoXbox(bool achievement) {
@@ -514,9 +549,8 @@ namespace renderer {
       if (demo.on) d = demoXbox;
       else if (!xbox::get(d)) { pc.drawTextCentered("XBOX: NO DATA", W / 2, Y_SINGLE, C_GREY); return; }
       const uint16_t cOn = Canvas::rgb(0x20E020);
-      char l1[20];
-      strlcpy(l1, d.gamertag, sizeof(l1));
-      drawFitted(pc, l1, 1, Y_L1, W - 7, colDate());
+      const uint32_t t = xboxPageShown.at(now);
+      drawFitted(pc, d.gamertag, 1, Y_L1, W - 7, colDate(), t);
       pc.fillRect(W - 4, Y_L1 + 2, 3, 3, d.online ? cOn : C_GREY);
       char lines[4][64];
       uint16_t cols[4];
@@ -531,8 +565,13 @@ namespace renderer {
         cols[n++] = colText();
       }
       if (d.nrecent) { snprintf(lines[n], sizeof(lines[n]), "%s", d.recent[0].name); cols[n++] = C_ORANGE; }
-      const uint8_t slot = (uint8_t)((now / (demo.on ? 2000 : 3000)) % n);
-      drawFitted(pc, lines[slot], 1, Y_L2, W - 2, cols[slot]);
+      // each line stays up for its turn, or for as long as it takes to scroll through
+      uint32_t dur[4], total = 0;
+      for (uint8_t i = 0; i < n; i++) { dur[i] = max<uint32_t>(demo.on ? 2000 : 3000, fittedMs(pc, lines[i], W - 2)); total += dur[i]; }
+      uint32_t r = t % total;
+      uint8_t slot = 0;
+      while (slot < n - 1 && r >= dur[slot]) r -= dur[slot++];
+      drawFitted(pc, lines[slot], 1, Y_L2, W - 2, cols[slot], r);
     }
 
     // ---- pages added in 0.14.0 ----
@@ -1077,35 +1116,33 @@ namespace renderer {
       xbox::Data d;
       return g_cfg.xbox.enabled && g_cfg.xbox.screen && xbox::get(d) && d.nrecent > 0;
     }
+    // the age of an unlock: 5M, 3H, 2D, 1Y; "" while the clock is not set
+    void ageText(char* out, size_t n, time_t t) {
+      const time_t now = time(nullptr);
+      const long ago = now > 1700000000 ? (long)(now - t) : -1;
+      if (ago < 0) out[0] = '\0';
+      else if (ago < 3600) snprintf(out, n, "%ldM", max(1L, ago / 60));
+      else if (ago < 86400) snprintf(out, n, "%ldH", ago / 3600);
+      else if (ago < 365 * 86400L) snprintf(out, n, "%ldD", ago / 86400);
+      else snprintf(out, n, "%ldY", ago / (365 * 86400L));
+    }
     void drawXboxScreen(Canvas& c) {
       xbox::Data d;
       if (demo.on) d = demoXbox;
       else if (!xbox::get(d)) return;
+      const uint32_t t = xboxScreenShown.at(millis());
       tinyFont(c);
       char right[16];
-      snprintf(right, sizeof(right), "%luG", (unsigned long)d.gamerscore);
+      // a lowercase g: in the 3x5 font a capital G is a 6
+      snprintf(right, sizeof(right), "%lug", (unsigned long)d.gamerscore);
+      drawMarquee(c, d.gamertag, 1, 0, (int16_t)(W - 4 - c.textWidth(right)), Canvas::rgb(0x20E020), t);
       c.drawTextRight(right, W - 1, 0, colTemp());
-      char gt[sizeof(d.gamertag)];
-      strlcpy(gt, d.gamertag, sizeof(gt));
-      while (gt[0] && c.textWidth(gt) > W - 4 - c.textWidth(right)) gt[strlen(gt) - 1] = '\0';
-      c.drawText(gt, 1, 0, Canvas::rgb(0x20E020));
-      const time_t now = time(nullptr);
       for (uint8_t i = 0; i < d.nrecent && (int16_t)((i + 1) * 8) < H; i++) {
         const int16_t y = (int16_t)((i + 1) * 8);
-        const long ago = now > 1700000000 ? (long)(now - d.recent[i].t) : -1;   // clock not set: no age
-        right[0] = '\0';
-        if (ago >= 0) {
-          if (ago < 3600) snprintf(right, sizeof(right), "%ldM", max(1L, ago / 60));
-          else if (ago < 86400) snprintf(right, sizeof(right), "%ldH", ago / 3600);
-          else if (ago < 365 * 86400L) snprintf(right, sizeof(right), "%ldD", ago / 86400);
-          else snprintf(right, sizeof(right), "%ldY", ago / (365 * 86400L));
-          c.drawTextRight(right, W - 1, y, C_GREY);
-        }
-        char nm[sizeof(d.recent[i].name)];
-        strlcpy(nm, d.recent[i].name, sizeof(nm));
+        ageText(right, sizeof(right), d.recent[i].t);
         const int16_t avail = (int16_t)(W - 1 - (right[0] ? c.textWidth(right) + 3 : 0));
-        while (nm[0] && c.textWidth(nm) > avail) nm[strlen(nm) - 1] = '\0';   // a long name shortens, it never collides
-        c.drawText(nm, 1, y, i == 0 ? C_ORANGE : colText());
+        drawMarquee(c, d.recent[i].name, 1, y, avail, i == 0 ? C_ORANGE : colText(), t);
+        if (right[0]) c.drawTextRight(right, W - 1, y, C_GREY);
       }
     }
 
@@ -1116,43 +1153,25 @@ namespace renderer {
       xbox::Data d;
       if (demo.on) d = demoXbox;
       else if (!xbox::get(d)) return;
+      const uint32_t t = xboxScreenShown.at(millis());
       tinyFont(c);
       char right[16];
-      snprintf(right, sizeof(right), "%luG", (unsigned long)d.gamerscore);
+      snprintf(right, sizeof(right), "%lug", (unsigned long)d.gamerscore);
+      drawMarquee(c, d.gamertag, 1, oy, (int16_t)(W - 4 - c.textWidth(right)), Canvas::rgb(0x20E020), t);
       c.drawTextRight(right, W - 1, oy, colTemp());
-      char gt[sizeof(d.gamertag)];
-      strlcpy(gt, d.gamertag, sizeof(gt));
-      while (gt[0] && c.textWidth(gt) > W - 4 - c.textWidth(right)) gt[strlen(gt) - 1] = '\0';
-      c.drawText(gt, 1, oy, Canvas::rgb(0x20E020));
       // online dot, then the game in the foreground (or just online / offline)
       const int16_t sy = (int16_t)(oy + 7);
+      drawMarquee(c, d.online ? (d.game[0] ? d.game : "Online") : "Offline", 6, sy, W - 7,
+                  d.online && d.game[0] ? colText() : C_GREY, t);
       c.fillRect(1, sy + 1, 3, 3, d.online ? Canvas::rgb(0x20E020) : C_GREY);
-      char st[sizeof(d.game)];
-      strlcpy(st, d.online ? (d.game[0] ? d.game : "Online") : "Offline", sizeof(st));
-      while (st[0] && c.textWidth(st) > W - 7) st[strlen(st) - 1] = '\0';
-      c.drawText(st, 6, sy, d.online && d.game[0] ? colText() : C_GREY);
       c.drawFastHLine(0, oy + 14, W, Canvas::rgb(0x303030));
-      const time_t now = time(nullptr);
       for (uint8_t i = 0; i < d.nrecent && i < 4; i++) {
         const int16_t y = (int16_t)(oy + 16 + i * 12);
-        char nm[sizeof(d.recent[i].name)];
-        strlcpy(nm, d.recent[i].name, sizeof(nm));
-        while (nm[0] && c.textWidth(nm) > W - 2) nm[strlen(nm) - 1] = '\0';
-        c.drawText(nm, 1, y, i == 0 ? C_ORANGE : colText());
-        const long ago = now > 1700000000 ? (long)(now - d.recent[i].t) : -1;   // clock not set: no age
-        right[0] = '\0';
-        if (ago >= 0) {
-          if (ago < 3600) snprintf(right, sizeof(right), "%ldM", max(1L, ago / 60));
-          else if (ago < 86400) snprintf(right, sizeof(right), "%ldH", ago / 3600);
-          else if (ago < 365 * 86400L) snprintf(right, sizeof(right), "%ldD", ago / 86400);
-          else snprintf(right, sizeof(right), "%ldY", ago / (365 * 86400L));
-          c.drawTextRight(right, W - 1, y + 6, C_GREY);
-        }
-        char gm[sizeof(d.recent[i].game)];
-        strlcpy(gm, d.recent[i].game, sizeof(gm));
-        const int16_t avail = (int16_t)(W - 1 - (right[0] ? c.textWidth(right) + 3 : 0));
-        while (gm[0] && c.textWidth(gm) > avail) gm[strlen(gm) - 1] = '\0';
-        c.drawText(gm, 3, y + 6, Canvas::rgb(0x707070));
+        drawMarquee(c, d.recent[i].name, 1, y, W - 2, i == 0 ? C_ORANGE : colText(), t);
+        ageText(right, sizeof(right), d.recent[i].t);
+        const int16_t avail = (int16_t)(W - 4 - (right[0] ? c.textWidth(right) + 3 : 0));
+        drawMarquee(c, d.recent[i].game, 3, (int16_t)(y + 6), avail, Canvas::rgb(0x707070), t);
+        if (right[0]) c.drawTextRight(right, W - 1, (int16_t)(y + 6), C_GREY);
       }
     }
 

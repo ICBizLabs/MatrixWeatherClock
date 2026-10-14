@@ -15,9 +15,12 @@ namespace frame_snapshot {
     buf = (uint16_t*)calloc(W * H, sizeof(uint16_t));
   }
 
-  void update(const uint16_t* pixels) {
+  void update(const uint16_t* pixels, uint16_t y0, uint16_t rows) {
+    if (!rows) rows = H;
+    if (y0 >= H) return;
+    if (rows > H - y0) rows = H - y0;
     if (!buf || !mtx || xSemaphoreTake(mtx, 0) != pdTRUE) return;   // skip a frame rather than stall rendering
-    memcpy(buf, pixels, W * H * sizeof(uint16_t));
+    memcpy(buf + (size_t)y0 * W, pixels, (size_t)W * rows * sizeof(uint16_t));
     xSemaphoreGive(mtx);
   }
 

@@ -123,9 +123,9 @@ void setup() {
 
   if (!panel::begin(g_cfg.panel, g_cfg.display.brightness, g_cfg.display.gamma)) LOGE("panel begin failed");
   else LOGI("panel ok: %s @ %d Hz", panel::driverName(), panel::refreshRateHz());
-  frame_snapshot::begin(layout::W, layout::H);
   renderer::begin(millis());
   if (panel::stacked()) { lower = new Canvas(layout::W, layout::H); renderer::enableLower(); }
+  frame_snapshot::begin(layout::W, lower ? layout::H * 2 : layout::H);   // the LCD preview shows both halves
   if (g_cfg.first_boot) renderer::requestTest(10000);
   alarmclock::begin();
 
@@ -257,7 +257,8 @@ void loop() {
     renderer::tick(canvas, now);
     if (lower) { renderer::tickLower(*lower, now); panel::presentStacked(canvas, *lower); }
     else panel::present(canvas);
-    frame_snapshot::update(canvas.getBuffer());
+    frame_snapshot::update(canvas.getBuffer(), 0, layout::H);
+    if (lower) frame_snapshot::update(lower->getBuffer(), layout::H, layout::H);
   } else {
     delay(1);
   }
