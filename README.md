@@ -10,6 +10,11 @@ a 64x64 LED-style dot matrix: the clock and its pages on top, and the forecast, 
 taking turns underneath. See [4-inch LCD board](#4-inch-lcd-board). A third build targets the **Spotpear ESP32-C3
 1.44-inch "mini TV"** pendant, with the same picture on a 128x128 screen; see [ESP32-C3 mini TV](#esp32-c3-mini-tv).
 
+<p align="center">
+  <img src="docs/screens/gif/showreel.gif" width="512" alt="Showreel: the clock's demo mode cycling through its screens">
+</p>
+<p align="center"><em>Demo mode, captured from a running clock. Every screen is in the <a href="#screens">Screens</a> gallery.</em></p>
+
 > Status: running on real hardware (the controller and panel listed below). The panel driver, WiFi setup, weather,
 > NWS alerts, web interface, OTA and self-update are in daily use. The alert chime, thumb-wheel keys, lightning feed
 > and Pushbullet have been built but not yet confirmed on hardware; reports welcome. Other 64x32 panels may need the
@@ -251,7 +256,8 @@ the alert screens further down are simulated renderings with the same layout, fo
 <img src="docs/screens/gif/showreel.gif" width="512" alt="Showreel: every example screen in turn, with captions">
 
 *Every screen in turn (about two minutes): pages, effects, forecast, hourly graph, indoor sensor, radar, alerts, alarm,
-timer, message, holiday themes, night mode, test pattern and update. Individual scenes follow below.*
+timer, message, holiday themes, night mode, test pattern and update. Individual scenes follow below, including the
+Xbox page and the 4-inch LCD.*
 
 <img src="docs/screens/gif/rotation.gif" width="384" alt="Pages rotating with slide transitions">
 
@@ -283,6 +289,16 @@ timer, message, holiday themes, night mode, test pattern and update. Individual 
 | Air quality page: score, trend, good / fair / poor (BME680) | Barometer page: pressure, tendency and the Zambretti forecast |
 | <img src="docs/screens/gif/tide.gif" width="256" alt="Tide page: next high and low, rising arrow, height now"> | <img src="docs/screens/gif/moon.gif" width="256" alt="Moon phase page"> |
 | Tide page: next high and low water, rising / falling arrow, height right now | Moon page: tonight's disc, phase name, percentage lit, days to full or new |
+| <img src="docs/screens/gif/xbox.gif" width="256" alt="Xbox page: gamertag, online dot, then gamerscore, game, friends and newest achievement in turn"> | <img src="docs/screens/gif/xbox_unlock.gif" width="256" alt="Xbox achievement banner scrolling under the clock"> |
+| Xbox page: gamertag and online dot, then gamerscore, game, friends online and the newest achievement in turn | Xbox banner when the player unlocks an achievement |
+
+On the 4-inch LCD the same pages sit above a second 64x32 screen, and the Xbox achievements screen takes the whole
+square. Text too long for its line scrolls through it.
+
+| | |
+|---|---|
+| <img src="docs/screens/gif/lcd.gif" width="256" alt="4-inch LCD: clock and temperature page above the world clock"> | <img src="docs/screens/gif/xbox_achievements.gif" width="256" alt="4-inch LCD: Xbox achievements filling the whole square"> |
+| 4-inch LCD: clock and pages on top, world clock below | 4-inch LCD: latest achievements, each with its game and age |
 
 ### Weather alert screens
 
