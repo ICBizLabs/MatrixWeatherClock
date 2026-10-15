@@ -734,7 +734,7 @@ namespace web {
       String n = r->hasParam("name", true) ? r->getParam("name", true)->value() : (r->hasParam("name") ? r->getParam("name")->value() : "");
       actions::Id id;
       if (!actions::parse(n.c_str(), id) || id == actions::Id::None) { sendJsonError(r, 400, "unknown action"); return; }
-      actions::run(id, "web");
+      if (!actions::run(id, "web")) { sendJsonError(r, 409, "not available right now"); return; }
       r->send(200, "application/json", "{\"ok\":true}");
     });
     server.on("/api/actions", HTTP_GET, [](AsyncWebServerRequest* r) {

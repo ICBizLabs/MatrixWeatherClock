@@ -23,7 +23,7 @@ namespace actions {
       { "show_ip", "Show IP address" }, { "chime", "Play the chime" },
       { "say_time", "Speak the time" }, { "stopwatch", "Stopwatch start / pause" }, { "stopwatch_reset", "Stopwatch reset" },
       { "sleep_30", "Sleep in 30 min" }, { "sleep_60", "Sleep in 60 min" }, { "sleep_cancel", "Cancel sleep" },
-      { "show_world", "Show world clock" } };
+      { "show_world", "Show world clock" }, { "show_xbox", "Show Xbox achievements" } };
   }
 
   const char* name(Id id) { return (uint8_t)id < (uint8_t)Id::COUNT ? DEFS[(uint8_t)id].name : "none"; }
@@ -50,6 +50,7 @@ namespace actions {
       case Id::ShowForecast: renderer::requestFullScreen("forecast"); break;
       case Id::ShowHourly: renderer::requestFullScreen("hourly"); break;
       case Id::ShowWorld: renderer::requestFullScreen("world"); break;
+      case Id::ShowXbox: if (!renderer::requestFullScreen("xbox")) return false; break;   // off, or nothing fetched yet
       case Id::AckAlerts: alerts::acknowledge("all"); break;
       case Id::AlarmStop: alarmclock::stop(); break;
       case Id::AlarmSnooze: if (alarmclock::ringing()) alarmclock::snooze(); break;

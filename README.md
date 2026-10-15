@@ -633,7 +633,7 @@ its timing, so it can still be learned. Holding a key repeats only the brightnes
 <img src="docs/ui/remote.png" width="300" alt="Phone remote page with big buttons">
 
 **Phone.** http://matrixweatherclock.local/remote is a one-screen remote for a phone or tablet, made to be added to the home
-screen: dismiss, next page, radar, forecast, hourly graph, 5/10/30-minute timers, snooze and stop, stopwatch, speak
+screen: dismiss, next page, radar, forecast, hourly graph, world clock, Xbox achievements, 5/10/30-minute timers, snooze and stop, stopwatch, speak
 the time, brighter and dimmer, night mode, mute, chime, refresh, demo, sleep in 30 or 60 minutes, show IP. Scripts and home automation can call the same actions with
 `POST /api/action?name=show_radar`; `GET /api/actions` lists them. Brightness steps and the night-mode override live
 in RAM and reset at reboot; mute toggles the audio switch for the session.

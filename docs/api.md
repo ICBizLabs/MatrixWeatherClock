@@ -19,7 +19,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/test/chime` | `{style?, force}` plays a chime (`force` ignores quiet hours) |
 | POST | `/api/test/say` | `{text, force}` speaks a phrase from the voice pack ("Tornado Warning", "Lightning nearby", ...); 404 when the phrase is not in the pack, 409 without a pack or while another sound plays |
 | POST | `/api/voice/download` | fetch the manifest and (re)download the voice pack into LittleFS |
-| POST | `/api/action` | `name=<action>` (form or query): runs a remote-control action now; `GET /api/actions` lists `{name, label}` pairs (next_page, dismiss, show_radar, show_forecast, show_hourly, ack_alerts, alarm_stop, alarm_snooze, timer_5/10/30, timer_cancel, bright_up, bright_down, night, mute, demo, refresh, show_ip, chime, say_time, stopwatch, stopwatch_reset, sleep_30, sleep_60, sleep_cancel) |
+| POST | `/api/action` | `name=<action>` (form or query): runs a remote-control action now; `GET /api/actions` lists `{name, label}` pairs (next_page, dismiss, show_radar, show_forecast, show_hourly, ack_alerts, alarm_stop, alarm_snooze, timer_5/10/30, timer_cancel, bright_up, bright_down, night, mute, demo, refresh, show_ip, chime, say_time, stopwatch, stopwatch_reset, sleep_30, sleep_60, sleep_cancel, show_world, show_xbox); an action that cannot run now (no Xbox data yet, the clock not set for say_time) answers 409 |
 | GET | `/api/remote` | infrared receiver state: `{enabled, pin, received, learning, last_code, last_proto, last_ms, last_age_s}` |
 | POST | `/api/remote/learn` | record the next received code without executing it (the web UI's Learn button) |
 | GET | `/remote` | the phone remote page |
