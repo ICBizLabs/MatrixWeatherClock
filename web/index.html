@@ -35,6 +35,7 @@ main{padding:16px;max-width:900px;margin:0 auto}section{display:none}section.on{
 .pagerow .mv{background:none;border:1px solid var(--line);color:var(--mut);border-radius:5px;cursor:pointer;padding:1px 7px;font-size:12px;line-height:1.5}
 .pagerow .mv:hover{color:var(--fg);border-color:var(--acc)}
 .pagerow .mv:disabled{opacity:.3;cursor:default}
+[hidden]{display:none!important}
 label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)}
 input,select{background:#0d1014;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit}
 input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc)}label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
@@ -54,9 +55,9 @@ progress{width:100%;height:10px}
 <header><h1>Matrix Weather Clock</h1><span id="hdr">connecting…</span><a href="/remote" style="margin-left:auto;font-size:13px;color:var(--acc)">Phone remote</a><a href="/setup" style="margin-left:14px;font-size:13px;color:var(--acc)">Setup wizard</a></header>
 <div class="a2hs" id="a2hs"><img src="/icon-192.png" alt=""><span id="a2hs-text">Add this page to your home screen to use it like an app.</span><button class="btn" id="a2hs-btn" hidden>Install</button><button class="btn sec" onclick="a2hsDismiss()">Not now</button></div>
 <nav>
-<button data-tab="status" class="on">Status</button><button data-tab="weather">Location &amp; Weather</button>
-<button data-tab="display">Display</button><button data-tab="alarms">Alarms</button><button data-tab="panel">Panel</button><button data-tab="audio">Audio</button>
-<button data-tab="notify">Notify</button><button data-tab="remote">Remote</button><button data-tab="wifi">WiFi</button><button data-tab="update">Update</button>
+<button data-tab="status" class="on">Status</button><button data-tab="weather">Weather</button><button data-tab="display">Display</button>
+<button data-tab="alarms">Clock &amp; Alarms</button><button data-tab="gaming">Gaming</button><button data-tab="audio">Sound &amp; Notify</button>
+<button data-tab="panel">Hardware</button><button data-tab="system">System</button>
 </nav>
 <main>
 
@@ -66,6 +67,10 @@ progress{width:100%;height:10px}
  <div class="card" id="radar-card" hidden><h2>Radar</h2><canvas id="rd" width="512" height="256" style="width:100%;max-width:512px;background:#000;border-radius:6px;image-rendering:pixelated"></canvas>
   <div class="row"><span class="msg" id="rd-label"></span><button class="btn sec" onclick="post('/api/show',null,'screen=radar')">Show on the clock</button><button class="btn sec" onclick="post('/api/radar/refresh');radarAt=0">Refresh</button><span class="msg" id="msg-radar"></span></div></div>
  <div class="card"><h2>Now</h2><table id="st-now"></table></div>
+ <div class="card"><h2>Alerts</h2><div id="st-alerts"></div>
+  <div class="row"><button class="btn sec" onclick="post('/api/show',null,'screen=forecast')">Show forecast</button><button class="btn sec" onclick="post('/api/show',null,'screen=hourly')">Show hourly graph</button>
+  <button class="btn sec" onclick="post('/api/alerts/ack',null,'id=all')">Acknowledge all</button>
+  <button class="btn sec" onclick="post('/api/refresh')">Refresh weather &amp; alerts</button></div></div>
  <div class="card" id="indoor-card"><h2>Indoor sensor</h2><table id="st-indoor"></table>
   <div id="indoor-none" hidden>
    <p class="msg">No BME280 / BMP280 / BME680 answers at 0x76 or 0x77. The clock looks again every 30 seconds, so plugging it in does not need a reboot. Check: the 4-pin connector on the <b>left edge</b> of the board (marked 3V3 GND IO1 IO2) is the I2C port; SDA goes to IO1 and SCL to IO2; a Qwiic-style cable has GND and 3V3 in the opposite order to this board, so wire by the labels, not the colours; the sensor's own pins are usually VIN/3V3, GND, SCL, SDA.</p>
@@ -77,7 +82,10 @@ progress{width:100%;height:10px}
   <div class="row"><button class="btn sec" onclick="post('/api/tide/refresh')">Refresh predictions</button><span class="msg" id="msg-tide"></span></div></div>
  <div class="card" id="xbox-card" hidden><h2>Xbox</h2><table id="st-xbox"></table>
   <div class="row"><button class="btn sec" onclick="post('/api/xbox/refresh')">Refresh now</button></div></div>
- <div class="card"><h2>Demo mode</h2><div class="row"><label class="chk"><input type="checkbox" id="demo" onchange="setDemo(this.checked)">Cycle through demo screens</label>
+ <div class="card"><h2>System</h2><table id="st-sys"></table>
+  <div class="row"><button class="btn sec" onclick="post('/api/test/panel')">Panel test pattern</button>
+  <a class="btn sec" href="/api/log" target="_blank" style="text-decoration:none">View log</a></div></div>
+ <div class="card"><h2>Try it: demo mode</h2><div class="row"><label class="chk"><input type="checkbox" id="demo" onchange="setDemo(this.checked)">Cycle through demo screens</label>
   for <input id="demomin" type="number" min="1" max="720" value="10" style="width:80px"> minutes
   <label class="chk"><input type="checkbox" id="demosound" onchange="if($('#demo').checked)setDemo(true)">with sounds</label><span class="msg" id="msg-demo"></span></div>
   <p class="msg">Shows sample weather, animations, forecast and hourly screens, alert banners, lightning, an alarm, a timer, a message, holiday themes and night mode, eight seconds each, using made-up data. Switches itself off after the time above; the wheel push also ends it. With sounds on, the alert, lightning, alarm, timer and message scenarios play their chimes even during quiet hours.</p></div>
@@ -85,17 +93,10 @@ progress{width:100%;height:10px}
   <input id="msgsec" type="number" min="0" max="86400" value="30" style="width:80px" title="seconds, 0 = until cleared"><label class="chk"><input type="checkbox" id="msgchime">Chime</label>
   <button class="btn" onclick="sendMsg()">Show</button><button class="btn sec" onclick="post('/api/message/clear')">Clear</button></div>
   <p class="msg">Anything can push a message: <code>curl -X POST http://matrixweatherclock.local/api/message -H 'Content-Type: application/json' -d '{"text":"Dinner is ready","seconds":60,"chime":true}'</code></p></div>
- <div class="card"><h2>Alerts</h2><div id="st-alerts"></div>
-  <div class="row"><button class="btn sec" onclick="post('/api/show',null,'screen=forecast')">Show forecast</button><button class="btn sec" onclick="post('/api/show',null,'screen=hourly')">Show hourly graph</button>
-  <button class="btn sec" onclick="post('/api/alerts/ack',null,'id=all')">Acknowledge all</button>
-  <button class="btn sec" onclick="post('/api/refresh')">Refresh weather &amp; alerts</button></div></div>
- <div class="card"><h2>System</h2><table id="st-sys"></table>
-  <div class="row"><button class="btn sec" onclick="post('/api/test/panel')">Panel test pattern</button>
-  <a class="btn sec" href="/api/log" target="_blank" style="text-decoration:none">View log</a></div></div>
 </section>
 
 <section id="weather">
- <div class="card"><h2>Location</h2><div class="grid">
+ <div class="card" id="c-location"><h2>Location and time</h2><div class="grid">
   <label>Latitude<input data-k="location.lat" type="number" step="0.0001" min="-90" max="90"></label>
   <label>Longitude<input data-k="location.lon" type="number" step="0.0001" min="-180" max="180"></label>
   <label>Name (optional)<input data-k="location.name" maxlength="47"></label>
@@ -112,17 +113,17 @@ progress{width:100%;height:10px}
   <select id="geores" hidden onchange="geopick()"></select>
   <button class="btn sec" id="geobtn" onclick="geo()" hidden>Use my location</button><span class="msg" id="msg-geo"></span></div>
  <p class="msg">Pick a match to fill in the coordinates, then Save. Only the coordinates are used; the name is just a label.</p>
- <div class="row"><button class="btn" onclick="save('weather','location')">Save</button><span class="msg" id="msg-location"></span></div>
+ <div class="row"><button class="btn" onclick="save('c-location','location')">Save</button><span class="msg" id="msg-location"></span></div>
 </div>
- <div class="card"><h2>Weather (Open-Meteo)</h2><div class="grid">
+ <div class="card" id="c-weather"><h2>Weather (Open-Meteo)</h2><div class="grid">
   <label class="chk"><input data-k="weather.enabled" type="checkbox">Enabled</label>
   <label>Units<select data-k="weather.units"><option value="imperial">°F, mph</option><option value="metric">°C, km/h</option></select></label>
   <label>Refresh (minutes)<input data-k="weather.refresh_min" type="number" min="5" max="1440"></label>
   <label>Forecast days<input data-k="weather.forecast_days" type="number" min="1" max="3"></label>
  </div>
- <div class="row"><button class="btn" onclick="save('weather','weather-cfg')">Save</button><span class="msg" id="msg-weather-cfg"></span></div>
+ <div class="row"><button class="btn" onclick="save('c-weather','weather-cfg')">Save</button><span class="msg" id="msg-weather-cfg"></span></div>
 </div>
- <div class="card"><h2>NWS alerts (api.weather.gov)</h2><div class="grid">
+ <div class="card" id="c-alerts"><h2>NWS alerts (api.weather.gov)</h2><div class="grid">
   <label class="chk"><input data-k="alerts.enabled" type="checkbox">Enabled</label>
   <label>Contact for User-Agent (required by NWS)<input data-k="alerts.user_agent_contact" placeholder="you@example.com" maxlength="63"></label>
   <label>Poll interval (seconds)<input data-k="alerts.poll_sec" type="number" min="60" max="3600"></label>
@@ -133,9 +134,9 @@ progress{width:100%;height:10px}
   <label>Banner speed (px/s)<input data-k="alerts.banner_px_per_s" type="number" min="5" max="80"></label>
   <label class="chk"><input data-k="alerts.tls_verify" type="checkbox">Verify TLS certificate (needs /nws_root.pem)</label>
  </div>
- <div class="row"><button class="btn" onclick="save('weather','alerts-cfg')">Save</button><span class="msg" id="msg-alerts-cfg"></span></div>
+ <div class="row"><button class="btn" onclick="save('c-alerts','alerts-cfg')">Save</button><span class="msg" id="msg-alerts-cfg"></span></div>
 </div>
- <div class="card"><h2>Lightning (Blitzortung network)</h2><div class="grid">
+ <div class="card" id="c-lightning"><h2>Lightning (Blitzortung network)</h2><div class="grid">
   <label class="chk"><input data-k="lightning.enabled" type="checkbox">Enabled</label>
   <label>Radius (km)<input data-k="lightning.radius_km" type="number" min="5" max="300"></label>
   <label>Strikes count as nearby for (minutes)<input data-k="lightning.window_min" type="number" min="1" max="120"></label>
@@ -144,10 +145,24 @@ progress{width:100%;height:10px}
   <label>MQTT relay<input data-k="lightning.server" maxlength="63"></label>
   <label>Port<input data-k="lightning.port" type="number" min="1" max="65535"></label>
  </div><p class="msg">Live strikes from the volunteer Blitzortung.org network through the community relay used by the Home Assistant integration (personal use only; no account needed). Uses your coordinates above.</p>
- <div class="row"><button class="btn" onclick="save('weather')">Save</button>
+ <div class="row"><button class="btn" onclick="save('c-lightning','weather')">Save</button>
   <button class="btn sec" onclick="post('/api/test/alert',{event:'Tornado Warning',severity:'Extreme',headline:'Test tornado warning until 5 PM',minutes:3})">Inject test alert (3 min)</button>
   <span class="msg" id="msg-weather"></span></div></div>
- <div class="card"><h2>Tides (NOAA CO-OPS)</h2><div class="grid">
+ <div class="card" id="c-radar"><h2>Weather radar</h2><div class="grid">
+  <label class="chk"><input data-k="radar.enabled" type="checkbox">Show the animated radar loop</label>
+  <label>View radius (km; the screen spans twice this wide)<input data-k="radar.radius_km" type="number" min="25" max="400"></label>
+  <label>Take a turn among the full screens every N page cycles<input data-k="radar.every_n_cycles" type="number" min="1" max="20"></label>
+  <label class="chk"><input data-k="radar.show_when_precip" type="checkbox">Come back often while rain or snow is around</label>
+  <label>...every N page cycles<input data-k="radar.precip_every_n_cycles" type="number" min="1" max="20"></label>
+  <label>Show for (seconds)<input data-k="radar.show_sec" type="number" min="4" max="60"></label>
+  <label>Frame time (ms)<input data-k="radar.frame_ms" type="number" min="100" max="2000"></label>
+  <label>Pause on the newest frame (ms)<input data-k="radar.hold_ms" type="number" min="0" max="5000"></label>
+  <label>Fetch a new frame every (minutes)<input data-k="radar.refresh_min" type="number" min="2" max="30"></label>
+  <label>Radar data<select data-k="radar.source"><option value="nowcoast">NOAA nowCOAST MRMS mosaic (quality controlled)</option><option value="mesonet">Iowa Mesonet NEXRAD composite (unfiltered)</option></select></label>
+  <label>Base map under the echoes<select data-k="radar.base_map"><option value="both">Coastline and water tint</option><option value="coast">Coastline only</option><option value="landwater">Water tint only</option><option value="none">None</option></select></label>
+ </div><div class="row"><button class="btn" onclick="save('c-radar','radar-cfg')">Save</button><span class="msg" id="msg-radar-cfg"></span></div>
+ <p class="msg">Radar from NOAA's nowCOAST map service: the MRMS reflectivity mosaic with birds, insects and clutter filtered out, the same product weather apps use. The unfiltered Iowa Mesonet NEXRAD composite stays available as an alternative. Either is cropped by the map server to the panel around your location; the newest image plus the 5 to 50 minutes-ago frames make an eleven-frame loop. A blinking cross marks home. The base map (coastline, land and water from NASA GIBS) is fetched once for your location and radius. US coverage only for the radar itself.</p></div>
+ <div class="card" id="c-tide"><h2>Tides (NOAA CO-OPS)</h2><div class="grid">
   <label class="chk"><input data-k="tide.enabled" type="checkbox">Enabled</label>
   <label class="chk"><input data-k="tide.auto_page" type="checkbox">Add the "tide" page automatically</label>
   <label>NOAA station ID<input data-k="tide.station" maxlength="11" placeholder="8727012"></label>
@@ -155,41 +170,13 @@ progress{width:100%;height:10px}
   <label>Heights in<select data-k="tide.unit"><option value="auto">Automatic (feet with °F, metres with °C)</option><option value="ft">feet</option><option value="m">metres</option></select></label>
   <label>Refresh every (hours)<input data-k="tide.refresh_hours" type="number" min="1" max="24"></label>
   <label class="chk"><input data-k="tide.water_temp" type="checkbox">Also read the water temperature (not every station has one)</label>
- </div><div class="row"><button class="btn" onclick="save('weather','tide-cfg')">Save</button><button class="btn sec" onclick="findTideStations()">Find nearest stations</button><span class="msg" id="msg-tide-cfg"></span></div>
+ </div><div class="row"><button class="btn" onclick="save('c-tide','tide-cfg')">Save</button><button class="btn sec" onclick="findTideStations()">Find nearest stations</button><span class="msg" id="msg-tide-cfg"></span></div>
  <div class="list" id="tide-stations"></div>
  <p class="msg">High and low water predictions for one NOAA tide station (US coasts, Great Lakes excluded), datum MLLW. "Find nearest stations" downloads NOAA's station list in your browser and lists the six closest to the coordinates above; pick one and Save.</p></div>
- <div class="card"><h2>Xbox player (OpenXBL)</h2><div class="grid">
-  <label class="chk"><input data-k="xbox.enabled" type="checkbox">Enabled</label>
-  <label class="chk"><input data-k="xbox.auto_page" type="checkbox">Add the "xbox" page automatically</label>
-  <label>Gamertag<input data-k="xbox.gamertag" maxlength="15"></label>
-  <label>OpenXBL API key (<a href="https://xbl.io" target="_blank" rel="noopener">xbl.io</a> → sign in → API key)<input data-k="xbox.api_key" type="password" maxlength="47"></label>
-  <label class="chk"><input data-k="xbox.banners" type="checkbox">Scroll a line when the player comes online or unlocks an achievement</label>
-  <label class="chk"><input data-k="xbox.friends" type="checkbox">Count friends who are online</label>
-  <label class="chk"><input data-k="xbox.screen" type="checkbox">Latest achievements screen in the full-screen rotation</label>
- </div><div class="row"><button class="btn" onclick="saveKeys('xbox','xbox-cfg')">Save</button><button class="btn sec" onclick="testKey('xbox','xbox.api_key','xbox-cfg')">Test key</button><button class="btn sec" onclick="post('/api/show?screen=xbox')">Show achievements</button><span class="msg" id="msg-xbox-cfg"></span></div>
- <p class="msg">Gamerscore, online status and game, the latest achievements and friends online for any gamertag, through the free OpenXBL service (150 requests an hour; the clock uses about 40). Leave the key as *** to keep the stored one. A private friends list just leaves that line out.</p></div>
- <div class="card"><h2>Indoor sensor (BME280 / BMP280 / BME680 on the I2C header)</h2><div class="grid">
-  <label class="chk"><input data-k="indoor.enabled" type="checkbox">Enabled (auto-detected at 0x76 / 0x77)</label>
-  <label class="chk"><input data-k="indoor.auto_page" type="checkbox">Add the "indoor" page automatically when a sensor is found</label>
-  <label>Temperature offset (° in your units, e.g. -2 if the board warms the sensor)<input data-k="indoor.temp_offset" type="number" step="0.1" min="-30" max="30"></label>
-  <label>Humidity offset (%)<input data-k="indoor.humidity_offset" type="number" step="0.5" min="-50" max="50"></label>
-  <label>Altitude (m) for sea-level pressure, -1 = from the weather service<input data-k="indoor.altitude_m" type="number" step="1" min="-1" max="9000"></label>
-  <label class="chk"><input data-k="indoor.sea_level" type="checkbox">Show sea-level pressure (what forecasts quote)</label>
-  <label>Pressure unit<select data-k="indoor.pressure_unit"><option value="auto">Automatic (inHg with °F, hPa with °C)</option><option value="hpa">hPa</option><option value="inhg">inHg</option></select></label>
-  <label>Temperature / humidity trend window (minutes)<input data-k="indoor.trend_min" type="number" min="10" max="1440"></label>
-  <label>Pressure trend window (minutes)<input data-k="indoor.pressure_trend_min" type="number" min="30" max="1440"></label>
-  <label>Read every (seconds)<input data-k="indoor.sample_sec" type="number" min="2" max="600"></label>
-  <label class="chk"><input data-k="indoor.gas" type="checkbox">BME680: run the gas sensor (air quality; warms the chip about 1°)</label>
-  <label>Air quality "good" at or above (%)<input data-k="indoor.air_fair_below" type="number" min="1" max="100"></label>
-  <label>Air quality "poor" below (%)<input data-k="indoor.air_poor_below" type="number" min="1" max="100"></label>
-  <label class="chk"><input data-k="indoor.air_alert" type="checkbox">Chime / speak / push when the air stays poor for two minutes</label>
-  <label>At most one air alert every (minutes)<input data-k="indoor.air_alert_min" type="number" min="5" max="1440"></label>
- </div><div class="row"><button class="btn" onclick="save('weather','indoor')">Save</button><span class="msg" id="msg-indoor"></span></div>
- <p class="msg">Wire 3.3 V, GND, SDA (GPIO 1) and SCL (GPIO 2). Keep the sensor a few inches from the panel and the controller, or set a temperature offset. Trend arrows: up / down when the change over the window exceeds 0.5 °C, 3 % or 1 hPa; a double arrow means three times that. The air-quality score is relative: 75 % from the gas resistance against a clean-air baseline the clock learns (kept across reboots), 25 % from how close humidity is to 40 %. It needs about five minutes after power-up and improves over the first day.</p></div>
 </section>
 
 <section id="display">
- <div class="card"><h2>Brightness</h2><div class="grid">
+ <div class="card" id="c-brightness"><h2>Brightness</h2><div class="grid">
   <label>Manual brightness (1-255)<input data-k="display.brightness" type="number" min="1" max="255"></label>
   <label>Gamma<input data-k="display.gamma" type="number" step="0.1" min="1" max="3"></label>
   <label class="chk"><input data-k="display.schedule.enabled" type="checkbox">Day/night schedule</label>
@@ -205,8 +192,8 @@ progress{width:100%;height:10px}
   <label>Night mode level<input data-k="display.night_mode.level" type="number" min="1" max="255"></label>
   <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
  </div>
- <div class="row"><button class="btn" onclick="save('display','brightness')">Save</button><span class="msg" id="msg-brightness"></span></div></div>
- <div class="card"><h2>Pages</h2><div class="grid">
+ <div class="row"><button class="btn" onclick="save('c-brightness','brightness')">Save</button><span class="msg" id="msg-brightness"></span></div></div>
+ <div class="card" id="c-pages"><h2>Pages</h2><div class="grid">
   <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
   <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
   <label>Forecast every N page cycles<input data-k="display.forecast_every_n_cycles" type="number" min="1" max="20"></label>
@@ -222,23 +209,8 @@ progress{width:100%;height:10px}
  <div class="pagelist" id="pagelist"></div>
  <input type="hidden" data-k="display.pages" data-list="1" id="pageshidden">
  <p class="msg">Tick a page to put it in the rotation, then drag it by the handle, or use the arrows, to set the order. A ticked page still hides itself when it has nothing to show, so the sea-temperature page stays out of the way if your tide station has no thermometer.</p>
- <div class="row"><button class="btn" onclick="save('display','pages')">Save</button><span class="msg" id="msg-pages"></span></div></div>
- <div class="card"><h2>Sleep timer</h2><div class="row"><input id="sleepmin" type="number" min="1" max="720" value="30" style="width:90px"> minutes
-  <button class="btn" onclick="post('/api/sleep',{minutes:Number($('#sleepmin').value)})">Sleep</button><button class="btn sec" onclick="post('/api/sleep',{minutes:0})">Cancel</button>
-  <span class="msg" id="msg-sleep"></span></div>
-  <p class="msg">Runs normally for that long, then fades the panel out and holds it dark until you cancel it or the clock reboots. Handy at bedtime without touching the night-mode schedule.</p></div>
- <div class="card"><h2>Your own dates</h2><div class="grid" id="holgrid"></div>
-  <div class="row"><button class="btn" onclick="saveHolidays()">Save dates</button><span class="msg" id="msg-hol"></span></div>
-  <p class="msg">Up to four dates of your own, on top of the nine built-in holidays. On that day the clock and date take the colour you pick. Yours win if a built-in holiday falls on the same date.</p></div>
- <div class="card"><h2>Holiday themes</h2><div class="grid">
-  <label class="chk"><input data-k="display.holiday_themes" type="checkbox">Use holiday colours and effects on the day</label>
-  <label>Show one now, whatever the date<select data-k="display.force_theme" id="forcesel"></select></label>
- </div>
- <div class="grid" id="holthemes" style="margin-top:8px"></div>
- <input type="hidden" data-k="display.holidays_enabled" data-num="1" id="holidaysbits">
- <div class="row"><button class="btn" onclick="save('display','themes')">Save</button><span class="msg" id="msg-themes"></span></div>
- <p class="msg">Untick a holiday to skip it; your own dates above are not affected. "Show one now" pins a theme until you set it back to Automatic, which also works for a holiday you have unticked. The decoration (snow, confetti, hearts) still gives way to real rain or snow, to night mode, and to an alarm or alert.</p></div>
- <div class="card"><h2>Colours</h2>
+ <div class="row"><button class="btn" onclick="save('c-pages','pages')">Save</button><span class="msg" id="msg-pages"></span></div></div>
+ <div class="card" id="c-colours"><h2>Colours</h2>
   <div class="row"><label>Start from a theme<select id="presetsel" onchange="applyPreset(this)"></select></label><span class="msg" id="msg-preset"></span></div>
   <p class="msg">Picking one writes its six colours below, which you can then change however you like. It is applied straight away and not remembered, so the pickers are always what the clock is using.</p>
   <p class="msg warn" id="pinnote" hidden></p>
@@ -246,37 +218,21 @@ progress{width:100%;height:10px}
   <label>Time<input data-k="display.colors.time" type="color"></label><label>Date<input data-k="display.colors.date" type="color"></label>
   <label>Temperature<input data-k="display.colors.temp" type="color"></label><label>Text<input data-k="display.colors.text" type="color"></label>
   <label>High<input data-k="display.colors.hi" type="color"></label><label>Low<input data-k="display.colors.lo" type="color"></label>
- </div><div class="row"><button class="btn" onclick="save('display')">Save</button><span class="msg" id="msg-display"></span></div></div>
- <div class="card"><h2>Weather radar</h2><div class="grid">
-  <label class="chk"><input data-k="radar.enabled" type="checkbox">Show the animated radar loop</label>
-  <label>View radius (km; the screen spans twice this wide)<input data-k="radar.radius_km" type="number" min="25" max="400"></label>
-  <label>Take a turn among the full screens every N page cycles<input data-k="radar.every_n_cycles" type="number" min="1" max="20"></label>
-  <label class="chk"><input data-k="radar.show_when_precip" type="checkbox">Come back often while rain or snow is around</label>
-  <label>...every N page cycles<input data-k="radar.precip_every_n_cycles" type="number" min="1" max="20"></label>
-  <label>Show for (seconds)<input data-k="radar.show_sec" type="number" min="4" max="60"></label>
-  <label>Frame time (ms)<input data-k="radar.frame_ms" type="number" min="100" max="2000"></label>
-  <label>Pause on the newest frame (ms)<input data-k="radar.hold_ms" type="number" min="0" max="5000"></label>
-  <label>Fetch a new frame every (minutes)<input data-k="radar.refresh_min" type="number" min="2" max="30"></label>
-  <label>Radar data<select data-k="radar.source"><option value="nowcoast">NOAA nowCOAST MRMS mosaic (quality controlled)</option><option value="mesonet">Iowa Mesonet NEXRAD composite (unfiltered)</option></select></label>
-  <label>Base map under the echoes<select data-k="radar.base_map"><option value="both">Coastline and water tint</option><option value="coast">Coastline only</option><option value="landwater">Water tint only</option><option value="none">None</option></select></label>
- </div><div class="row"><button class="btn" onclick="save('display','radar-cfg')">Save</button><span class="msg" id="msg-radar-cfg"></span></div>
- <div class="card"><h2>World clock</h2>
-  <p class="msg">Up to four places at once on a full screen. Pick a zone, or type a POSIX TZ rule of your own for somewhere not listed. The label is what shows on the panel; leave it blank to use the name of the zone.</p>
-  <div id="wzgrid"></div>
-  <div class="grid">
-   <label class="chk"><input data-k="world.enabled" type="checkbox">Take a turn among the full screens</label>
-   <label>...at most every N page cycles<input data-k="world.every_n_cycles" type="number" min="1" max="60"></label>
-   <label>Show for (seconds)<input data-k="world.show_sec" type="number" min="3" max="60"></label>
-  </div>
-  <div class="row"><button class="btn" onclick="saveWorld()">Save</button>
-   <button class="btn sec" onclick="post('/api/show?screen=world')">Show it now</button><span class="msg" id="msg-world"></span></div></div>
- <p class="msg">Radar from NOAA's nowCOAST map service: the MRMS reflectivity mosaic with birds, insects and clutter filtered out, the same product weather apps use. The unfiltered Iowa Mesonet NEXRAD composite stays available as an alternative. Either is cropped by the map server to the panel around your location; the newest image plus the 5 to 50 minutes-ago frames make an eleven-frame loop. A blinking cross marks home. The base map (coastline, land and water from NASA GIBS) is fetched once for your location and radius. US coverage only for the radar itself.</p></div>
+ </div><div class="row"><button class="btn" onclick="save('c-colours','display')">Save</button><span class="msg" id="msg-display"></span></div></div>
+ <div class="card" id="c-themes"><h2>Holiday themes</h2><div class="grid">
+  <label class="chk"><input data-k="display.holiday_themes" type="checkbox">Use holiday colours and effects on the day</label>
+  <label>Show one now, whatever the date<select data-k="display.force_theme" id="forcesel"></select></label>
+ </div>
+ <div class="grid" id="holthemes" style="margin-top:8px"></div>
+ <input type="hidden" data-k="display.holidays_enabled" data-num="1" id="holidaysbits">
+ <div class="row"><button class="btn" onclick="save('c-themes','themes')">Save</button><span class="msg" id="msg-themes"></span></div>
+ <p class="msg">Untick a holiday to skip it; your own dates above are not affected. "Show one now" pins a theme until you set it back to Automatic, which also works for a holiday you have unticked. The decoration (snow, confetti, hearts) still gives way to real rain or snow, to night mode, and to an alarm or alert.</p></div>
+ <div class="card"><h2>Your own dates</h2><div class="grid" id="holgrid"></div>
+  <div class="row"><button class="btn" onclick="saveHolidays()">Save dates</button><span class="msg" id="msg-hol"></span></div>
+  <p class="msg">Up to four dates of your own, on top of the nine built-in holidays. On that day the clock and date take the colour you pick. Yours win if a built-in holiday falls on the same date.</p></div>
 </section>
 
 <section id="alarms">
- <div class="card"><h2>Timer</h2><div class="row"><input id="timermin" type="number" min="1" max="1440" value="10" style="width:90px"> minutes
-  <button class="btn" onclick="post('/api/timer',{minutes:Number($('#timermin').value)})">Start</button><button class="btn sec" onclick="post('/api/timer/cancel')">Cancel</button>
-  <span class="msg" id="msg-timer"></span></div></div>
   <div class="card"><h2>Alarm 1</h2><div class="grid">
    <label class="chk"><input type="checkbox" class="al-en" data-i="0">Enabled</label>
    <label>Time<input type="time" class="al-time" data-i="0"></label>
@@ -311,6 +267,9 @@ progress{width:100%;height:10px}
   </div><div class="row" style="gap:12px"><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="0">Mo</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="1">Tu</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="2">We</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="3">Th</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="4">Fr</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="5">Sa</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="6">Su</label></div></div>
  <div class="card"><div class="row"><button class="btn" onclick="saveAlarms()">Save alarms</button><span class="msg" id="msg-alarms"></span></div>
   <p class="msg">A ringing alarm repeats its sound every few seconds for up to 10 minutes and ignores quiet hours. Wheel push = stop, wheel up/down = snooze.</p></div>
+ <div class="card"><h2>Timer</h2><div class="row"><input id="timermin" type="number" min="1" max="1440" value="10" style="width:90px"> minutes
+  <button class="btn" onclick="post('/api/timer',{minutes:Number($('#timermin').value)})">Start</button><button class="btn sec" onclick="post('/api/timer/cancel')">Cancel</button>
+  <span class="msg" id="msg-timer"></span></div></div>
  <div class="card"><h2>Stopwatch</h2><div class="row">
   <button class="btn" onclick="post('/api/stopwatch',{action:'toggle'})">Start / pause</button>
   <button class="btn sec" onclick="post('/api/stopwatch',{action:'reset'})">Reset</button>
@@ -319,32 +278,38 @@ progress{width:100%;height:10px}
  <div class="card"><h2>Countdowns</h2><div class="grid" id="evgrid"></div>
   <div class="row"><button class="btn" onclick="saveEvents()">Save countdowns</button><span class="msg" id="msg-events"></span></div>
   <p class="msg">Up to three dates. The "event" page shows whichever is nearest, counting the days. Tick "every year" for a birthday or anniversary; leave it clear and give a full year for a one-off.</p></div>
+ <div class="card"><h2>World clock</h2>
+  <p class="msg">Up to four places at once on a full screen. Pick a zone, or type a POSIX TZ rule of your own for somewhere not listed. The label is what shows on the panel; leave it blank to use the name of the zone.</p>
+  <div id="wzgrid"></div>
+  <div class="grid">
+   <label class="chk"><input data-k="world.enabled" type="checkbox">Take a turn among the full screens</label>
+   <label>...at most every N page cycles<input data-k="world.every_n_cycles" type="number" min="1" max="60"></label>
+   <label>Show for (seconds)<input data-k="world.show_sec" type="number" min="3" max="60"></label>
+  </div>
+  <div class="row"><button class="btn" onclick="saveWorld()">Save</button>
+   <button class="btn sec" onclick="post('/api/show?screen=world')">Show it now</button><span class="msg" id="msg-world"></span></div></div>
+ <div class="card"><h2>Sleep timer</h2><div class="row"><input id="sleepmin" type="number" min="1" max="720" value="30" style="width:90px"> minutes
+  <button class="btn" onclick="post('/api/sleep',{minutes:Number($('#sleepmin').value)})">Sleep</button><button class="btn sec" onclick="post('/api/sleep',{minutes:0})">Cancel</button>
+  <span class="msg" id="msg-sleep"></span></div>
+  <p class="msg">Runs normally for that long, then fades the panel out and holds it dark until you cancel it or the clock reboots. Handy at bedtime without touching the night-mode schedule.</p></div>
 </section>
 
-<section id="panel">
- <div class="card"><h2>HUB75 panel (changes need a reboot)</h2><div class="grid">
-  <label>Width<input data-k="panel.width" type="number" min="32" max="128"></label>
-  <label>Height<input data-k="panel.height" type="number" min="16" max="64"></label>
-  <label>Chained panels<input data-k="panel.chain" type="number" min="1" max="4"></label>
-  <label>Driver IC<select data-k="panel.driver"><option>SHIFTREG</option><option>FM6124</option><option>FM6126A</option><option>ICN2038S</option><option>MBI5124</option><option>DP3246</option></select></label>
-  <label class="chk"><input data-k="panel.clkphase" type="checkbox">Clock phase (untick if pixels shift/ghost)</label>
-  <label>Latch blanking (1-4, higher = less ghosting)<input data-k="panel.latch_blanking" type="number" min="1" max="4"></label>
-  <label>Min refresh (Hz)<input data-k="panel.min_refresh_hz" type="number" min="30" max="250"></label>
-  <label>Colour depth (bits)<input data-k="panel.color_depth_bits" type="number" min="4" max="8"></label>
-  <label>Max brightness cap<input data-k="panel.max_brightness" type="number" min="1" max="255"></label>
-  <label class="chk"><input data-k="panel.double_buffer" type="checkbox">Double buffer</label>
-  <label class="chk"><input data-k="panel.swap_rb" type="checkbox">Swap red/blue</label>
-  <label>LCD rotation (4-inch LCD board only)<select data-k="panel.rotation" data-num="1"><option value="0">0&deg;</option><option value="1">90&deg;</option><option value="2">180&deg;</option><option value="3">270&deg;</option></select></label>
- </div><div class="row"><button class="btn" onclick="save('panel')">Save</button><button class="btn sec" onclick="post('/api/reboot')">Reboot</button>
-  <button class="btn sec" onclick="post('/api/test/panel',null,'sec='+$('#testsec').value)">Run test pattern</button>
-  <select id="testsec"><option value="10">10 s</option><option value="30">30 s</option><option value="60">60 s</option><option value="300">5 min</option></select>
-  <span class="msg" id="msg-panel"></span></div>
- <p class="msg">Test pattern: solid red, green, blue, white → border with coloured corner markers and a diagonal → colour gradients and a grey ramp → info text. Stray pixels in a corner during the solid or gradient phases point at latch timing: raise latch blanking to 3 or 4 (applies without reboot), then try clock phase off.</p>
- <p class="msg">Symptoms: dark panel → try FM6126A or ICN2038S; washed-out colours → FM6124; ghost columns → latch blanking 3-4 and clock phase off; flicker → higher min refresh or 6-bit depth.</p></div>
+<section id="gaming">
+ <div class="card"><h2>Xbox (OpenXBL)</h2><div class="grid">
+  <label class="chk"><input data-k="xbox.enabled" type="checkbox">Enabled</label>
+  <label class="chk"><input data-k="xbox.auto_page" type="checkbox">Add the "xbox" page automatically</label>
+  <label>Gamertag<input data-k="xbox.gamertag" maxlength="15"></label>
+  <label><span>OpenXBL API key (<a href="https://xbl.io" target="_blank" rel="noopener" style="color:var(--acc)">xbl.io</a> → sign in → API key)</span><input data-k="xbox.api_key" type="password" maxlength="47"></label>
+  <label class="chk"><input data-k="xbox.banners" type="checkbox">Scroll a line when the player comes online or unlocks an achievement</label>
+  <label class="chk"><input data-k="xbox.friends" type="checkbox">Count friends who are online</label>
+  <label class="chk"><input data-k="xbox.screen" type="checkbox">Latest achievements screen in the full-screen rotation</label>
+ </div><div class="row"><button class="btn" onclick="saveKeys('xbox','xbox-cfg')">Save</button><button class="btn sec" onclick="testKey('xbox','xbox.api_key','xbox-cfg')">Test key</button><button class="btn sec" onclick="post('/api/show?screen=xbox')">Show achievements</button><span class="msg" id="msg-xbox-cfg"></span></div>
+ <p class="msg">Gamerscore, online status and game, the latest achievements and friends online for any gamertag, through the free OpenXBL service (150 requests an hour; the clock uses about 40). Leave the key as *** to keep the stored one. A private friends list just leaves that line out.</p></div>
+ <p class="msg">More services (Steam, RetroAchievements) can go here later.</p>
 </section>
 
 <section id="audio">
- <div class="card"><h2>Alert chime</h2><div class="grid">
+ <div class="card" id="c-chime"><h2>Alert chime</h2><div class="grid">
   <label class="chk"><input data-k="audio.enabled" type="checkbox">Enabled</label>
   <label>Volume (%, 100 = codec full scale, no digital gain)<input data-k="audio.volume" type="number" min="0" max="100"></label>
   <label>Chime for alerts, lightning, messages<select data-k="audio.chime"><option value="two_tone">Two tone</option><option value="triple_beep">Triple beep</option><option value="chirp">Chirp</option><option value="alarm_beeps">Alarm clock beeps</option><option value="doorbell">Doorbell</option><option value="arpeggio">Arpeggio</option><option value="sonar">Sonar ping</option><option value="sos">Morse SOS</option><option value="siren_hilo">Siren: hi-lo</option><option value="siren_wail">Siren: wail</option><option value="siren_yelp">Siren: yelp</option><option value="nws_1050">NOAA 1050 Hz warning tone</option><option value="eas_attention">EAS attention signal</option><option value="eas_full">EAS with data bursts</option><option value="none">None</option></select></label>
@@ -353,19 +318,19 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="audio.quiet.enabled" type="checkbox">Quiet hours</label>
   <label>Quiet from<input data-k="audio.quiet.start" type="time"></label>
   <label>Quiet until<input data-k="audio.quiet.end" type="time"></label>
- </div><div class="row"><button class="btn" onclick="save('audio')">Save</button>
+ </div><div class="row"><button class="btn" onclick="save('c-chime','audio')">Save</button>
   <button class="btn sec" onclick="post('/api/test/chime',{force:true})">Test chime</button>
   <select id="trysound"><option value="two_tone">Two tone</option><option value="triple_beep">Triple beep</option><option value="chirp">Chirp</option><option value="alarm_beeps">Alarm clock beeps</option><option value="doorbell">Doorbell</option><option value="arpeggio">Arpeggio</option><option value="sonar">Sonar ping</option><option value="sos">Morse SOS</option><option value="siren_hilo">Siren: hi-lo</option><option value="siren_wail">Siren: wail</option><option value="siren_yelp">Siren: yelp</option><option value="nws_1050">NOAA 1050 Hz warning tone</option><option value="eas_attention">EAS attention signal</option><option value="eas_full">EAS with data bursts</option></select><button class="btn sec" onclick="post('/api/test/chime',{style:$('#trysound').value,force:true})">Play</button><span class="msg" id="msg-audio"></span></div>
   <p class="msg" style="margin-bottom:0">The EAS and NOAA tones are simulations of the broadcast signals for your own clock; this is not an official alerting device. Long sounds (sirens, EAS) play once per trigger and are never queued up.</p></div>
- <div class="card"><h2>Hourly chime</h2><div class="grid">
+ <div class="card" id="c-hourly"><h2>Hourly chime</h2><div class="grid">
   <label class="chk"><input data-k="audio.hourly_chime" type="checkbox">Chime on the hour</label>
   <label class="chk"><input data-k="audio.hourly_strike" type="checkbox">Strike the hour (1 to 12 times, about one a second)</label>
   <label class="chk"><input data-k="audio.hourly_half" type="checkbox">One chime on the half hour too</label>
   <label class="chk"><input data-k="audio.hourly_speak" type="checkbox">Speak the time after the chime</label>
   <label>Hourly sound<select data-k="audio.hourly_style"><option value="two_tone">Two tone</option><option value="triple_beep">Triple beep</option><option value="chirp">Chirp</option><option value="alarm_beeps">Alarm clock beeps</option><option value="doorbell">Doorbell</option><option value="arpeggio">Arpeggio</option><option value="sonar">Sonar ping</option><option value="sos">Morse SOS</option><option value="siren_hilo">Siren: hi-lo</option><option value="siren_wail">Siren: wail</option><option value="siren_yelp">Siren: yelp</option><option value="nws_1050">NOAA 1050 Hz warning tone</option><option value="eas_attention">EAS attention signal</option><option value="eas_full">EAS with data bursts</option><option value="none">None</option></select></label>
- </div><div class="row"><button class="btn" onclick="save('audio','hourly')">Save</button><span class="msg" id="msg-hourly"></span></div>
+ </div><div class="row"><button class="btn" onclick="save('c-hourly','hourly')">Save</button><span class="msg" id="msg-hourly"></span></div>
   <p class="msg">Quiet hours silence the hourly chime, so it will not wake you. It also stays quiet while an alarm is ringing or snoozed.</p></div>
- <div class="card"><h2>Spoken announcements</h2><div class="grid">
+ <div class="card" id="c-speech"><h2>Spoken announcements</h2><div class="grid">
   <label class="chk"><input data-k="audio.speech.enabled" type="checkbox">Speak after the chime</label>
   <label class="chk"><input data-k="audio.speech.alerts" type="checkbox">Weather alerts: the event name ("Tornado Warning")</label>
   <label class="chk"><input data-k="audio.speech.lightning" type="checkbox">"Lightning nearby"</label>
@@ -374,16 +339,13 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="audio.speech.indoor" type="checkbox">"Air quality poor" (BME680)</label>
   <label class="chk"><input data-k="audio.speech.say_time" type="checkbox">Speak the time on request and on the hour</label>
   <label>Say each announcement this many times<input data-k="audio.speech.repeat" type="number" min="1" max="3"></label>
- </div><div class="row"><button class="btn" onclick="save('audio')">Save</button>
+ </div><div class="row"><button class="btn" onclick="save('c-speech','voice')">Save</button>
   <button class="btn sec" onclick="post('/api/test/say-time',null,'force=1')">Speak the time</button>
   <button class="btn sec" id="voicedl" onclick="post('/api/voice/download')">Download voice pack</button>
   <select id="sayphrase"><option value="">(voice pack not loaded)</option></select><button class="btn sec" onclick="post('/api/test/say',{text:$('#sayphrase').value,force:true})">Say</button><span class="msg" id="msg-voice"></span></div>
   <table id="st-voice"></table>
   <p class="msg">The clock speaks with a pre-rendered voice pack (about 4 MB, Piper TTS with the public-domain LJ Speech voice) that it downloads once from the update site and keeps in its flash; new packs arrive with updates. Announcements follow the chime's quiet hours and use the same volume.</p></div>
-</section>
-
-<section id="notify">
- <div class="card"><h2>Pushbullet</h2><div class="grid">
+ <div class="card" id="c-pushbullet"><h2>Pushbullet</h2><div class="grid">
   <label>Access token (Pushbullet → Settings → Account)<input data-k="pushbullet.token" type="password" maxlength="39"></label>
   <label class="chk"><input data-k="pushbullet.notify_alerts" type="checkbox">Push new weather alerts to my phone</label>
   <label>Only alerts of at least<select data-k="pushbullet.notify_min_severity"><option>Unknown</option><option>Minor</option><option>Moderate</option><option>Severe</option><option>Extreme</option></select></label>
@@ -395,10 +357,8 @@ progress{width:100%;height:10px}
   <label>Show a push for (seconds, 0 = until cleared)<input data-k="pushbullet.show_sec" type="number" min="0" max="3600"></label>
   <label class="chk"><input data-k="pushbullet.chime" type="checkbox">Chime when a push is shown</label>
  </div>
- <div class="row"><button class="btn" onclick="save('notify')">Save</button><button class="btn sec" onclick="post('/api/test/push')">Send test push</button><button class="btn sec" onclick="testKey('pushbullet','pushbullet.token','pb-key')">Test token</button><span class="msg" id="msg-notify"></span><span class="msg" id="msg-pb-key"></span></div>
+ <div class="row"><button class="btn" onclick="save('c-pushbullet','notify')">Save</button><button class="btn sec" onclick="post('/api/test/push')">Send test push</button><button class="btn sec" onclick="testKey('pushbullet','pushbullet.token','pb-key')">Test token</button><span class="msg" id="msg-notify"></span><span class="msg" id="msg-pb-key"></span></div>
  <p class="msg">The clock registers itself as a device called "Matrix Weather Clock" in your Pushbullet account, so you can push text to it from the phone app (choose the device) or from IFTTT / scripts. Leave the token as *** to keep the stored one.</p></div>
-</section>
-
  <div class="card"><h2>Webhook</h2><div class="grid">
   <label class="chk"><input data-k="webhook.enabled" type="checkbox">Enabled</label>
   <label>URL<input data-k="webhook.url" maxlength="159" placeholder="https://ntfy.sh/my-topic"></label>
@@ -417,7 +377,44 @@ progress{width:100%;height:10px}
   <p class="msg">Posts a small JSON object to any URL you choose, so it works with ntfy, Gotify, Home Assistant, Discord or your own script without an account. The two field names let you match what the service expects: ntfy wants <code>title</code> and <code>message</code>, which is the default. Leave the header value as *** to keep the stored one.</p></div>
 </section>
 
-<section id="remote">
+<section id="panel">
+ <div class="card" id="c-panel"><h2 id="panel-title">HUB75 panel (changes need a reboot)</h2><div class="grid">
+  <label class="hub">Width<input data-k="panel.width" type="number" min="32" max="128"></label>
+  <label class="hub">Height<input data-k="panel.height" type="number" min="16" max="64"></label>
+  <label class="hub">Chained panels<input data-k="panel.chain" type="number" min="1" max="4"></label>
+  <label class="hub">Driver IC<select data-k="panel.driver"><option>SHIFTREG</option><option>FM6124</option><option>FM6126A</option><option>ICN2038S</option><option>MBI5124</option><option>DP3246</option></select></label>
+  <label class="chk hub"><input data-k="panel.clkphase" type="checkbox">Clock phase (untick if pixels shift/ghost)</label>
+  <label class="hub">Latch blanking (1-4, higher = less ghosting)<input data-k="panel.latch_blanking" type="number" min="1" max="4"></label>
+  <label class="hub">Min refresh (Hz)<input data-k="panel.min_refresh_hz" type="number" min="30" max="250"></label>
+  <label class="hub">Colour depth (bits)<input data-k="panel.color_depth_bits" type="number" min="4" max="8"></label>
+  <label>Max brightness cap<input data-k="panel.max_brightness" type="number" min="1" max="255"></label>
+  <label class="chk hub"><input data-k="panel.double_buffer" type="checkbox">Double buffer</label>
+  <label class="chk hub"><input data-k="panel.swap_rb" type="checkbox">Swap red/blue</label>
+  <label class="lcd">LCD rotation<select data-k="panel.rotation" data-num="1"><option value="0">0&deg;</option><option value="1">90&deg;</option><option value="2">180&deg;</option><option value="3">270&deg;</option></select></label>
+ </div><div class="row"><button class="btn" onclick="save('c-panel','panel')">Save</button><button class="btn sec" onclick="post('/api/reboot')">Reboot</button>
+  <button class="btn sec" onclick="post('/api/test/panel',null,'sec='+$('#testsec').value)">Run test pattern</button>
+  <select id="testsec"><option value="10">10 s</option><option value="30">30 s</option><option value="60">60 s</option><option value="300">5 min</option></select>
+  <span class="msg" id="msg-panel"></span></div>
+ <p class="msg hub">Test pattern: solid red, green, blue, white → border with coloured corner markers and a diagonal → colour gradients and a grey ramp → info text. Stray pixels in a corner during the solid or gradient phases point at latch timing: raise latch blanking to 3 or 4 (applies without reboot), then try clock phase off.</p>
+ <p class="msg hub">Symptoms: dark panel → try FM6126A or ICN2038S; washed-out colours → FM6124; ghost columns → latch blanking 3-4 and clock phase off; flicker → higher min refresh or 6-bit depth.</p></div>
+ <div class="card" id="c-indoor"><h2>Indoor sensor (BME280 / BMP280 / BME680 on the I2C header)</h2><div class="grid">
+  <label class="chk"><input data-k="indoor.enabled" type="checkbox">Enabled (auto-detected at 0x76 / 0x77)</label>
+  <label class="chk"><input data-k="indoor.auto_page" type="checkbox">Add the "indoor" page automatically when a sensor is found</label>
+  <label>Temperature offset (° in your units, e.g. -2 if the board warms the sensor)<input data-k="indoor.temp_offset" type="number" step="0.1" min="-30" max="30"></label>
+  <label>Humidity offset (%)<input data-k="indoor.humidity_offset" type="number" step="0.5" min="-50" max="50"></label>
+  <label>Altitude (m) for sea-level pressure, -1 = from the weather service<input data-k="indoor.altitude_m" type="number" step="1" min="-1" max="9000"></label>
+  <label class="chk"><input data-k="indoor.sea_level" type="checkbox">Show sea-level pressure (what forecasts quote)</label>
+  <label>Pressure unit<select data-k="indoor.pressure_unit"><option value="auto">Automatic (inHg with °F, hPa with °C)</option><option value="hpa">hPa</option><option value="inhg">inHg</option></select></label>
+  <label>Temperature / humidity trend window (minutes)<input data-k="indoor.trend_min" type="number" min="10" max="1440"></label>
+  <label>Pressure trend window (minutes)<input data-k="indoor.pressure_trend_min" type="number" min="30" max="1440"></label>
+  <label>Read every (seconds)<input data-k="indoor.sample_sec" type="number" min="2" max="600"></label>
+  <label class="chk"><input data-k="indoor.gas" type="checkbox">BME680: run the gas sensor (air quality; warms the chip about 1°)</label>
+  <label>Air quality "good" at or above (%)<input data-k="indoor.air_fair_below" type="number" min="1" max="100"></label>
+  <label>Air quality "poor" below (%)<input data-k="indoor.air_poor_below" type="number" min="1" max="100"></label>
+  <label class="chk"><input data-k="indoor.air_alert" type="checkbox">Chime / speak / push when the air stays poor for two minutes</label>
+  <label>At most one air alert every (minutes)<input data-k="indoor.air_alert_min" type="number" min="5" max="1440"></label>
+ </div><div class="row"><button class="btn" onclick="save('c-indoor','indoor')">Save</button><span class="msg" id="msg-indoor"></span></div>
+ <p class="msg">Wire 3.3 V, GND, SDA (GPIO 1) and SCL (GPIO 2). Keep the sensor a few inches from the panel and the controller, or set a temperature offset. Trend arrows: up / down when the change over the window exceeds 0.5 °C, 3 % or 1 hPa; a double arrow means three times that. The air-quality score is relative: 75 % from the gas resistance against a clean-air baseline the clock learns (kept across reboots), 25 % from how close humidity is to 40 %. It needs about five minutes after power-up and improves over the first day.</p></div>
  <div class="card"><h2>Infrared remote</h2><div class="grid">
   <label class="chk"><input data-k="remote.enabled" type="checkbox">Enabled</label>
   <label>Receiver GPIO (44 = the RX0 pad on the bottom header)<input data-k="remote.pin" type="number" min="0" max="48"></label>
@@ -430,8 +427,8 @@ progress{width:100%;height:10px}
   <p class="msg">Open <a href="/remote" style="color:var(--acc)">/remote</a> on a phone or tablet and add it to the home screen for a full-screen remote with big buttons: dismiss, next page, radar, forecast, hourly graph, world clock, Xbox achievements, timers, snooze and stop, brightness, night mode, mute, demo, refresh. Anything else can use <code>POST /api/action?name=next_page</code>; <code>GET /api/actions</code> lists the names.</p></div>
 </section>
 
-<section id="wifi">
- <div class="card"><h2>Network</h2><div class="grid">
+<section id="system">
+ <div class="card" id="c-wifi"><h2>Network</h2><div class="grid">
   <label>SSID<input data-k="wifi.ssid" list="ssids" maxlength="32"><datalist id="ssids"></datalist></label>
   <label>Password<input data-k="wifi.pass" type="password" maxlength="64"></label>
   <label>Hostname<input data-k="wifi.hostname" maxlength="31"></label>
@@ -444,15 +441,9 @@ progress{width:100%;height:10px}
   <label>Netmask<input data-k="wifi.netmask" maxlength="15" placeholder="255.255.255.0"></label>
   <label>DNS server<input data-k="wifi.dns" maxlength="15" placeholder="blank = gateway"></label>
   <label>TX power<select data-k="wifi.tx_power" data-num="1"><option value="78">19.5 dBm (max)</option><option value="60">15 dBm</option><option value="44">11 dBm</option><option value="34">8.5 dBm (default)</option><option value="20">5 dBm</option><option value="8">2 dBm</option></select></label>
- </div><div class="row"><button class="btn" onclick="save('wifi')">Save &amp; connect</button><button class="btn sec" onclick="scan()">Scan networks</button><span class="msg" id="msg-wifi"></span></div>
+ </div><div class="row"><button class="btn" onclick="save('c-wifi','wifi')">Save &amp; connect</button><button class="btn sec" onclick="scan()">Scan networks</button><span class="msg" id="msg-wifi"></span></div>
  <p class="msg">Leave a password as *** to keep the stored one. After saving new credentials the clock connects; the setup AP disappears once it is online. With two networks saved the clock alternates between them while it retries. A static address takes effect on the next connection, so save and let it reconnect.</p></div>
- <div class="card"><h2>Danger zone</h2>
-  <p class="msg">Factory reset erases every setting stored on the clock: WiFi credentials, location and time zone, alert, display, panel and audio settings, alarms, and the Pushbullet token. The clock then reboots into the setup access point (MatrixWeatherClock-XXXX / http://4.3.2.1/) as on first use. The firmware itself is not changed. Consider downloading a backup on the Update tab first.</p>
-  <div class="row"><button class="btn bad" onclick="if(confirm('Erase all settings and reboot into setup mode?'))post('/api/factory-reset',null,'confirm=yes')">Factory reset</button></div></div>
-</section>
-
-<section id="update">
- <div class="card"><h2>Automatic updates</h2>
+ <div class="card" id="c-update"><h2>Automatic updates</h2>
   <table id="st-update"></table>
   <div class="grid" style="margin-top:10px">
    <label class="chk"><input data-k="update.check" type="checkbox">Check for new versions</label>
@@ -460,7 +451,7 @@ progress{width:100%;height:10px}
    <label>Check every (hours)<input data-k="update.check_hours" type="number" min="1" max="168"></label>
    <label>Manifest URL<input data-k="update.url" maxlength="127"></label>
   </div>
-  <div class="row"><button class="btn" onclick="save('update')">Save</button><button class="btn sec" onclick="post('/api/update/check')">Check now</button>
+  <div class="row"><button class="btn" onclick="save('c-update','update2')">Save</button><button class="btn sec" onclick="post('/api/update/check')">Check now</button>
    <button class="btn sec" id="installbtn" onclick="if(confirm('Download and install the new version now? The clock reboots when done.'))post('/api/update/install')">Install available version</button><span class="msg" id="msg-update2"></span></div>
   <p class="msg">The clock reads the web installer's manifest, downloads the OTA image over HTTPS, checks its MD5 and reboots into the new version. Automatic installs wait while an alarm or timer is running.</p></div>
  <div class="card"><h2>Settings backup</h2><div class="row"><a class="btn sec" href="/api/config?download=1" style="text-decoration:none">Download backup</a>
@@ -470,14 +461,22 @@ progress{width:100%;height:10px}
   <p class="msg">Upload <code>.pio/build/seengreat_hub75_s3/firmware.bin</code>. The clock reboots when the upload succeeds; settings are kept.</p>
   <div class="row"><input type="file" id="fw" accept=".bin"><button class="btn" onclick="ota()">Upload</button></div>
   <progress id="otap" value="0" max="100" hidden></progress><div class="msg" id="msg-update"></div></div>
+ <div class="card"><h2>Danger zone</h2>
+  <p class="msg">Factory reset erases every setting stored on the clock: WiFi credentials, location and time zone, alert, display, panel and audio settings, alarms, and the Pushbullet token. The clock then reboots into the setup access point (MatrixWeatherClock-XXXX / http://4.3.2.1/) as on first use. The firmware itself is not changed. Consider downloading a backup (Settings backup, above) first.</p>
+  <div class="row"><button class="btn bad" onclick="if(confirm('Erase all settings and reboot into setup mode?'))post('/api/factory-reset',null,'confirm=yes')">Factory reset</button></div></div>
 </section>
 </main>
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let cfg=null;
+// The Hardware tab shows only what this board has: HUB75 driver settings, or the LCD rotation
+function boardFields(drv){const lcd=/ST7701/.test(drv),tft=/ST7735/.test(drv);
+ $('#panel-title').textContent=lcd?'4-inch LCD':tft?'1.44-inch screen':'HUB75 panel (changes need a reboot)';
+ $$('#c-panel .hub').forEach(e=>e.hidden=lcd||tft);$$('#c-panel .lcd').forEach(e=>e.hidden=!lcd);}
 function showTab(id){$$('nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===id));$$('main section').forEach(s=>s.classList.toggle('on',s.id===id));}
 $$('nav button').forEach(b=>b.onclick=()=>{showTab(b.dataset.tab);history.replaceState(null,'','#'+b.dataset.tab);});
-if(location.hash&&$('#'+location.hash.slice(1)))showTab(location.hash.slice(1));
+// tabs merged in 0.18.4: old bookmarks land on the tab that now holds those cards
+{const OLD={notify:'audio',remote:'panel',wifi:'system',update:'system'};const h=location.hash.slice(1);const t=OLD[h]||h;if(t&&$('#'+t))showTab(t);}
 function get(o,p){return p.split('.').reduce((a,k)=>a==null?undefined:a[k],o)}
 function set(o,p,v){const ks=p.split('.');let a=o;ks.slice(0,-1).forEach(k=>{a=a[k]=a[k]||{}});a[ks.at(-1)]=v}
 function fill(){$$('[data-k]').forEach(el=>{let v=get(cfg,el.dataset.k);if(v===undefined)return;
@@ -500,7 +499,7 @@ async function testKey(service,k,msgId){const el=$('[data-k="'+k+'"]');say(msgId
 function say(id,txt,cls){const m=$('#msg-'+id);if(!m)return;m.textContent=txt;m.className='msg '+(cls||'');}
 async function post(url,body,form){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json'},body:form?form:(body?JSON.stringify(body):null)});
  const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)alert(j.error||('HTTP '+r.status));else setTimeout(status,800);return j;}catch(e){alert(e);}}
-async function save(section,msgId){const m=msgId||section;const body=collect(section);if(section==='weather'){const t=$('#tzsel');const opt=t.selectedOptions[0];if(opt&&opt.dataset.posix&&body.time.tz_posix===opt.dataset.posix)delete body.time.tz_posix;}
+async function save(section,msgId){const m=msgId||section;const body=collect(section);if(body.time){const t=$('#tzsel');const opt=t.selectedOptions[0];if(opt&&opt.dataset.posix&&body.time.tz_posix===opt.dataset.posix)delete body.time.tz_posix;}
  say(m,'saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();
  if(!r.ok||!j.ok){say(m,j.error||('HTTP '+r.status),'bad');return;}
  say(m,'saved'+(j.reboot_required&&j.reboot_required.length?' — reboot required for: '+j.reboot_required.join(', '):''),j.reboot_required&&j.reboot_required.length?'warn':'ok');
@@ -802,11 +801,11 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  const y=$('#st-sys');y.innerHTML='';row(y,'Uptime',Math.floor(s.uptime_s/3600)+'h '+Math.floor(s.uptime_s%3600/60)+'m');row(y,'Screen',s.sys.screen+(s.sys.night?' (night)':'')+', brightness '+s.sys.brightness);
  const D=s.demo||{};if(document.activeElement!==$('#demo'))$('#demo').checked=!!D.on;say('demo',D.on?'showing: '+D.scenario+' · '+Math.ceil(D.remaining_s/60)+' min left':'','ok');
  row(y,'Full screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'forecast, hourly graph, radar and world clock take turns every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
- row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
+ boardFields(s.sys.driver||'');row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
  row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});webhookStatus(s.webhook);indoorStatus(s.indoor,s.i2c);tideStatus(s.tide);xboxStatus(s.xbox);radarStatus(s.radar);remoteStatus(s.remote);row(y,'Radar',s.radar&&s.radar.enabled?(s.radar.frames+' frames'+(s.radar.newest_age_min>=0?', newest '+s.radar.newest_age_min+' min old':'')+(s.radar.echo_near?' <span class="warn">echoes nearby</span>':'')+(s.radar.error?' <span class="bad">'+s.radar.error+'</span>':'')):'off');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
  const U=s.update||{};const ut=$('#st-update');if(ut){ut.innerHTML='';row(ut,'Installed','v'+U.current);row(ut,'Latest',U.latest?'v'+U.latest+(U.state==='available'?' <span class="warn">new version available</span>':U.state==='up-to-date'?' <span class="ok">up to date</span>':''):'not checked yet');
   row(ut,'Status',U.state+(U.state==='downloading'?' '+U.progress+'%':'')+(U.error?' <span class="bad">'+U.error+'</span>':'')+(U.last_check_age_s>=0?' · checked '+ago(U.last_check_age_s):''));$('#installbtn').disabled=U.state!=='available';}
- if(U.state==='available')row(y,'Update','<span class="warn">v'+U.latest+' available</span> (Update tab)');
+ if(U.state==='available')row(y,'Update','<span class="warn">v'+U.latest+' available</span> (System tab)');
  const P=s.pushbullet||{};if(P.configured)row(y,'Pushbullet',(P.device_ok?'registered':'<span class="warn">device not registered</span>')+', sent '+P.sent+', received '+P.received+(P.last_err?' <span class="bad">'+P.last_err+'</span>':''));
  if(s.sys.theme)row(y,'Theme',s.sys.theme);
  const a2=s.alarm||{};if(a2.ringing)row(n,'Alarm','<span class="bad">'+(a2.ringing_timer?'timer done':'ringing '+(a2.label||''))+'</span> <button class="btn sec" onclick="post(\'/api/alarm/stop\')">Stop</button> <button class="btn sec" onclick="post(\'/api/alarm/snooze\')">Snooze</button>');

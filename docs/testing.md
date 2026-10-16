@@ -11,7 +11,7 @@ pio device monitor           # serial log at 115200
 1. **Boot** – the monitor shows `MWC x.y.z boot`, the I2C map (`es8311=0x18 pca9557=0x.. rtc=0x51`) and
    `HUB75 ok 64x32 @ NNN Hz`. The panel plays the test pattern for 10 s on the very first boot.
 2. **WiFi** – without credentials the AP `MatrixWeatherClock-XXXX` appears; connect, open http://4.3.2.1/, enter SSID and
-   password on the WiFi tab and save. The panel shows `SETUP WIFI` / `4.3.2.1` until it is online, then the time.
+   password on the System tab and save. The panel shows `SETUP WIFI` / `4.3.2.1` until it is online, then the time.
    `ping matrixweatherclock.local` answers.
 3. **Config** – `curl -s http://matrixweatherclock.local/api/config | jq .display.brightness`, then
    `curl -X POST http://matrixweatherclock.local/api/config -H 'Content-Type: application/json' -d '{"display":{"brightness":30}}'`
@@ -20,7 +20,7 @@ pio device monitor           # serial log at 115200
    `curl -s 'http://api.open-meteo.com/v1/forecast?latitude=LAT&longitude=LON&current=temperature_2m&temperature_unit=fahrenheit'`.
    Bottom pages rotate; the forecast screen appears every third cycle. Unplug the router: the last data stays and
    `/api/status` `net.wx_err` shows the failure.
-5. **Alerts** – set the NWS contact on the Location tab, then
+5. **Alerts** – set the NWS contact on the Weather tab, then
    `curl -X POST http://matrixweatherclock.local/api/test/alert -H 'Content-Type: application/json' -d '{"event":"Tornado Warning","severity":"Extreme","headline":"Test until 5 PM","minutes":3}'`
    shows a red scrolling banner with a flashing frame; the chime plays (outside quiet hours); `GET /api/alerts`
    lists it; it disappears after 3 minutes. Injecting the same test twice does not flash again.
@@ -48,7 +48,7 @@ pio device monitor           # serial log at 115200
    text once 30 minutes of pressure history exist.
    **Remote** – with a receiver on GPIO 44 the boot log shows `remote: IR receiver on GPIO 44`; pressing any key
    raises `received` in `curl -s http://matrixweatherclock.local/api/remote` and logs `remote: code 0x... not mapped`; after
-   mapping it on the Remote tab the key runs its action. `curl -X POST 'http://matrixweatherclock.local/api/action?name=show_radar'`
+   mapping it on the Hardware tab the key runs its action. `curl -X POST 'http://matrixweatherclock.local/api/action?name=show_radar'`
    does the same from a script, and http://matrixweatherclock.local/remote works on a phone.
 7. **RTC / buttons / OTA** – power-cycle with WiFi unavailable: the time is right immediately and
    `/api/status` `time.source` is `rtc`. K1 short = next page, K1 long = test pattern, K2 short = acknowledge alerts,

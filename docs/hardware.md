@@ -36,7 +36,7 @@ keeps WiFi usable while the panel runs.
 
 ### First boot test pattern
 
-1. Solid red, green, blue, white (0.4 s each): checks colour order (swap red/blue in the Panel tab if wrong)
+1. Solid red, green, blue, white (0.4 s each): checks colour order (swap red/blue on the Hardware tab if wrong)
    and power (a dimming or resetting board means the panel supply is too weak).
 2. White border, coloured corner markers, a diagonal and a centre ladder: a doubled or interleaved image means
    the scan rate or driver type is wrong.

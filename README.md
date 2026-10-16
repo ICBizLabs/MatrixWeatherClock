@@ -180,16 +180,16 @@ GitHub release with the images, checksums and generated notes; a tag with a suff
 pre-release.
 
 `installer/` also holds the images directly: `matrix-weather-clock-<version>-factory.bin` (whole flash, write at offset 0 with
-esptool) and `matrix-weather-clock-<version>-ota.bin` (upload from the clock's Update tab). Every push to `main` rebuilds the
+esptool) and `matrix-weather-clock-<version>-ota.bin` (upload from the clock's System tab). Every push to `main` rebuilds the
 firmware on GitHub Actions, republishes the installer and, through the manifest, offers the new version to every clock
 that has automatic updates on; the images are also attached to each workflow run as an artifact. `python tools/make_installer.py --build` regenerates the folder locally.
 
 ## Automatic updates
 
-Once a clock runs version 0.3.0 or later it keeps itself current: every six hours (configurable on the Update tab) it
+Once a clock runs version 0.3.0 or later it keeps itself current: every six hours (configurable on the System tab) it
 reads the installer's `manifest.json`, and when a newer version is listed it downloads the OTA image over HTTPS, checks
 the MD5 from the manifest, installs it with a progress bar on the panel and reboots. Automatic installs wait while an
-alarm or timer is running. The Update tab shows the installed and latest versions and has "Check now" and "Install"
+alarm or timer is running. The System tab shows the installed and latest versions and has "Check now" and "Install"
 buttons; automatic installation can be switched off to install manually. The manifest URL is configurable, so a fork
 can point its clocks at its own GitHub Pages site. The same manifest advertises the voice pack for the spoken
 announcements; the clock fetches a new pack whenever the pack version changes.
@@ -197,13 +197,13 @@ announcements; the clock fetches a new pack whenever the pack version changes.
 ## Several clocks
 
 Every clock starts with the hostname `matrixweatherclock`, so with two or more on one network only one of them answers
-at http://matrixweatherclock.local/, and it is not predictable which. Give each clock its own name on the WiFi tab
+at http://matrixweatherclock.local/, and it is not predictable which. Give each clock its own name on the System tab
 (`kitchen-clock`, `office-clock`), reaching it by the IP address it shows after connecting, and each gets its own
 address such as http://kitchen-clock.local/. A DHCP reservation in the router keeps each clock's IP fixed as well,
 which helps on phones that do not resolve `.local` names.
 
 Automatic updates keep every clock on the same firmware without further work. To copy settings from one clock to
-another, download a backup on the Update tab and restore it on the other clock. The backup is the whole configuration,
+another, download a backup on the System tab and restore it on the other clock. The backup is the whole configuration,
 including the WiFi passwords, the hostname, the panel or screen settings and every API key, so either set the hostname
 back afterwards or delete the `wifi` and `panel` blocks from the file before restoring it. The same file can be posted
 to `/api/config` from a script to set up several clocks at once.
@@ -222,7 +222,7 @@ pio device monitor      # serial log, 115200 baud
 If no serial port appears, hold **BOOT**, tap **RST**, release **BOOT**, then upload again. The board uses the
 S3's native USB, so no driver is needed.
 
-Later updates can be uploaded from the browser (Update tab) with `.pio/build/seengreat_hub75_s3/firmware.bin`; settings
+Later updates can be uploaded from the browser (System tab) with `.pio/build/seengreat_hub75_s3/firmware.bin`; settings
 are kept across updates.
 
 For the 4-inch LCD board, build with `pio run -e guition_lcd4848` and flash through its CH340 port at 460800 baud
@@ -238,14 +238,14 @@ driver needed). If the upload sits at the progress bar on Windows, write the who
    with `SETUP WIFI` / `4.3.2.1` in the bottom half.
 2. Connect a phone or laptop to the WiFi network **MatrixWeatherClock-XXXX** (open by default). The setup page should open
    automatically; otherwise browse to http://4.3.2.1/.
-3. **WiFi tab**: pick your network (Scan), enter the password, Save & connect. The access point goes away once the
+3. **System tab**: pick your network (Scan), enter the password, Save & connect. The access point goes away once the
    clock is online.
-4. **Location & Weather tab**: type your city or ZIP code, press *Find* and pick the match to fill in
+4. **Weather tab**: type your city or ZIP code, press *Find* and pick the match to fill in
    latitude and longitude (the lookup uses Open-Meteo's geocoding service from your browser), choose the time zone, units, and enter a contact e-mail. The NWS API requires a contact in every
    request; alerts stay disabled until one is set.
 5. From now on the UI is at http://matrixweatherclock.local/ (or the IP shown in the header).
 
-<img src="docs/ui/setup-wifi.png" width="640" alt="WiFi tab while the clock runs its setup access point">
+<img src="docs/ui/setup-wifi.png" width="640" alt="System tab while the clock runs its setup access point">
 
 ## Screens
 
@@ -348,16 +348,14 @@ hold the settings. Changes apply immediately except panel driver settings, which
 
 | | |
 |---|---|
-| <img src="docs/ui/ui-weather.png" alt="Location & Weather tab"> | <img src="docs/ui/ui-display.png" alt="Display tab"> |
-| Location & Weather: coordinates with city/ZIP search, time zone, units, NWS alert filters, lightning, indoor sensor, tides, Xbox player | Display: brightness schedule, night mode, pages, effects, colours, radar |
-| <img src="docs/ui/ui-alarms.png" alt="Alarms tab"> | <img src="docs/ui/ui-update.png" alt="Update tab"> |
-| Alarms: countdown timer and four alarms with weekdays | Update: automatic updates, settings backup, firmware upload |
-| <img src="docs/ui/ui-panel.png" alt="Panel tab"> | <img src="docs/ui/ui-notify.png" alt="Notify tab"> |
-| Panel: HUB75 driver settings and the test pattern | Notify: Pushbullet notifications in both directions |
-| <img src="docs/ui/ui-audio.png" alt="Audio tab"> | <img src="docs/ui/ui-wifi.png" alt="WiFi tab"> |
-| Audio: chime, volume, quiet hours, spoken announcements | WiFi: network, hostname, setup AP password, factory reset |
-| <img src="docs/ui/ui-remote.png" alt="Remote tab"> | <img src="docs/ui/remote.png" width="300" alt="Phone remote page"> |
-| Remote: infrared receiver, learn mode, key mapping | The phone remote at /remote |
+| <img src="docs/ui/ui-weather.png" alt="Weather tab"> | <img src="docs/ui/ui-display.png" alt="Display tab"> |
+| Weather: location and time zone with city/ZIP search, units, NWS alert filters, lightning, radar, tides | Display: brightness schedule, night mode, pages and their order, colours, holiday themes, your own dates |
+| <img src="docs/ui/ui-alarms.png" alt="Clock & Alarms tab"> | <img src="docs/ui/ui-gaming.png" alt="Gaming tab"> |
+| Clock & Alarms: four alarms with weekdays, timer, stopwatch, countdowns, world clock, sleep timer | Gaming: the Xbox player, with a test button for the API key |
+| <img src="docs/ui/ui-audio.png" alt="Sound & Notify tab"> | <img src="docs/ui/ui-panel.png" alt="Hardware tab"> |
+| Sound & Notify: chimes, quiet hours, spoken announcements, Pushbullet and webhook notifications | Hardware: the panel (HUB75 driver settings, or the LCD's rotation), indoor sensor, infrared and phone remote |
+| <img src="docs/ui/ui-system.png" alt="System tab"> | <img src="docs/ui/remote.png" width="300" alt="Phone remote page"> |
+| System: WiFi, automatic updates, settings backup, firmware upload, factory reset | The phone remote at /remote |
 
 Screenshots are taken from the real page served with sample data; images live in `docs/ui/`.
 
@@ -412,12 +410,12 @@ during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
 - After three failed polls in a row the banner marks the data as stale with a grey dot in the corner; the last known
   alerts stay on screen.
 - **Acknowledge** (web UI or button K2) stops the flashing frame and any repeat chimes.
-- Test without waiting for a storm: the Location tab has an *Inject test alert* button (3 minutes, Extreme), and
+- Test without waiting for a storm: the Weather tab has an *Inject test alert* button (3 minutes, Extreme), and
   `tools/find_nws_test_point.sh` prints coordinates inside a currently active real alert.
 
 ## Lightning
 
-Optional, off by default (Location tab). The clock subscribes to the Blitzortung.org volunteer network through the
+Optional, off by default (Weather tab). The clock subscribes to the Blitzortung.org volunteer network through the
 public MQTT relay used by the Home Assistant integration (`blitzortung.ha.sed.pl`, personal use only, no account) for
 the map cells around your coordinates and keeps strikes inside your radius (default 40 km) for a window (default
 15 minutes). While strikes are nearby: a bolt icon next to the clock, a bolt flash across the panel on every new
@@ -427,7 +425,7 @@ show lightning in the animation even without the network feed.
 
 ## Alarms, timer and messages
 
-Alarms tab: up to four alarms with time, weekdays, label and sound. A ringing alarm shows `ALARM` and its label,
+Clock & Alarms tab: up to four alarms with time, weekdays, label and sound. A ringing alarm shows `ALARM` and its label,
 flashes an orange frame and repeats the sound every few seconds for up to ten minutes, ignoring quiet hours.
 Wheel push (K2) stops it, wheel up/down snoozes; the Status tab has the same buttons. The timer counts down in the
 bottom half and rings the same way.
@@ -437,11 +435,11 @@ rings once and then switches itself off, and that change is saved, so a reminder
 back the following week.
 
 The **stopwatch** counts up on the bottom half until you pause it and keeps the time on screen until you reset it.
-Start and pause it from the Alarms tab, the phone remote, an infrared key, or
+Start and pause it from the Clock & Alarms tab, the phone remote, an infrared key, or
 `POST /api/stopwatch {"action": "toggle"}`. It is independent of the countdown timer.
 
 The **sleep timer** runs the clock normally for the minutes you give it, then fades the panel out over the seconds set
-on the Display tab and holds it dark until you cancel it. `POST /api/sleep {"minutes": 30}`, or zero to cancel. It does
+on the Clock & Alarms tab and holds it dark until you cancel it. `POST /api/sleep {"minutes": 30}`, or zero to cancel. It does
 not touch the night-mode schedule, and it does not survive a reboot.
 
 Messages: `POST /api/message` with `{"text": "...", "seconds": 60, "chime": true, "color": "#40C0FF"}` scrolls the
@@ -453,7 +451,7 @@ The radar screen shows the MRMS base reflectivity mosaic from NOAA's [nowCOAST](
 service: the Multi-Radar Multi-Sensor product with quality control, so the evening bloom of birds and insects, ground
 and sea clutter are removed and what is left is rain, the same data the weather apps draw. The unfiltered NEXRAD
 composite from the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/ogc/) is available as an alternative
-on the Display tab. The clock asks for a 64x32 crop centred on your coordinates, 200 km wide by default, in the
+on the Weather tab. The clock asks for a 64x32 crop centred on your coordinates, 200 km wide by default, in the
 standard reflectivity colours on black: blues and greens for light rain, yellow and orange for heavy rain, red and
 magenta for severe cores. The newest mosaic plus the frames from 5 to 50 minutes ago make an eleven-frame loop, so the
 direction and speed of what is coming are obvious; after the first fill only the newest frame is fetched, every five
@@ -462,7 +460,7 @@ frame age down to "NOW".
 
 Under the echoes the clock draws a base map so the picture makes sense on a dry day: the coastline as a thin grey
 line and water as a dim blue tint, from NASA's Global Imagery Browse Services (the OpenStreetMap land/water mask and
-the Natural Earth coastlines), fetched once for your location and radius. The Display tab can switch to coastline
+the Natural Earth coastlines), fetched once for your location and radius. The Weather tab can switch to coastline
 only, water only or nothing.
 
 <img src="docs/screens/gif/radar_demo.gif" width="384" alt="Radar loop with a synthetic storm crossing the coast (demo mode)">
@@ -472,7 +470,7 @@ only, water only or nothing.
 The loop takes its turn with the forecast and hourly screens every few page cycles, and while echoes sit near the
 centre of the picture or the current conditions report rain or snow it comes back every two page cycles. The Status
 tab plays the same loop enlarged with a "Show on the clock" button, `POST /api/show` with `screen=radar` does the same,
-and the Display tab sets radius, timing and how often it appears. US coverage only, like the NWS alerts.
+and the Weather tab sets radius, timing and how often it appears. US coverage only, like the NWS alerts.
 
 ## Moon phase
 
@@ -486,7 +484,7 @@ same line, and the page can be dropped from the rotation on the Display tab.
 
 ## Tides
 
-Pick a NOAA tide station on the Location & Weather tab: *Find nearest stations* downloads NOAA's station list in
+Pick a NOAA tide station on the Weather tab: *Find nearest stations* downloads NOAA's station list in
 your browser and lists the six closest to your coordinates, and one click fills the ID in. The clock then fetches
 the high and low water predictions (datum MLLW) for the next two days a few times a day, in feet or metres following
 your units. The **tide** page shows the next two extremes in order, high in the "high" colour and low in the "low"
@@ -500,7 +498,7 @@ the predictions come from CO-OPS; `/api/status` carries the same numbers with ep
 
 The clock can follow one Xbox player through [OpenXBL](https://xbl.io), a free service in front of the Xbox Live
 web API. Sign in at xbl.io with a Microsoft account, copy the API key from the dashboard, and enter it with the
-gamertag on the Location & Weather tab under **Xbox player**. Any public gamertag works, not only the key's own.
+gamertag on the Gaming tab under **Xbox**. Any public gamertag works, not only the key's own.
 *Test key* checks the key before you save it and shows the gamertag of the account it belongs to.
 
 The **xbox** page shows the gamertag with a green dot while the player is online, and below it, every few seconds:
@@ -536,7 +534,7 @@ Qwiic and STEMMA QT cables use the same plug but carry GND and 3V3 the other way
 firmware finds the sensor at 0x76 or 0x77 by its chip ID at boot (and keeps looking every 30 seconds, so it can be
 plugged in while the clock runs), adds an **indoor** page to the rotation (a house icon,
 temperature, humidity and pressure) and shows the values on the Status tab with a three-hour chart. Keep the sensor a
-few inches away from the panel and the controller, which run warm, or dial the offset in on the Location & Weather tab.
+few inches away from the panel and the controller, which run warm, or dial the offset in on the Hardware tab.
 
 <img src="docs/screens/gif/indoor.gif" width="384" alt="Indoor page: house icon, temperature, humidity and pressure with trend arrows">
 
@@ -562,7 +560,7 @@ brass barometer did, and on a coast it is right surprisingly often. It appears a
 Each value carries a **trend arrow**: temperature and humidity are compared with the reading one hour ago (0.5 °C or
 3 % RH to count as a change), pressure with three hours ago as weather services do (1 hPa; while the history is still
 shorter the change is scaled up to the full window). A double arrow marks a fast change: three times the threshold,
-for pressure a sign of a front moving through. Windows and thresholds live on the Location & Weather tab. Pressure is
+for pressure a sign of a front moving through. Windows and thresholds live on the Hardware tab. Pressure is
 shown reduced to sea level, which is what forecasts and weather sites quote, using the elevation Open-Meteo reports for
 your location (or the altitude you enter); switch it off to see station pressure. `GET /api/indoor/history` returns up
 to 24 hours at one point per minute for your own graphs.
@@ -572,17 +570,17 @@ to 24 hours at one point per minute for your own graphs.
 Right after the chime the clock can say what happened in a natural English voice: the NWS event name for a new alert
 ("Tornado Warning", "Winter Storm Watch", any of the 111 event types the NWS publishes, or "Weather alert" for one it
 does not know), "Lightning nearby" for the first strike of a storm, "Alarm" or "Timer finished" when a ring starts, and
-the scenario names in demo mode. Each can be switched off separately on the Audio tab, and an announcement can be
+the scenario names in demo mode. Each can be switched off separately on the Sound & Notify tab, and an announcement can be
 repeated up to three times. Speech follows the chime's quiet hours and volume.
 
-It can also **speak the time**, either on request (the Audio tab, the phone remote, an infrared key, or
+It can also **speak the time**, either on request (the Sound & Notify tab, the phone remote, an infrared key, or
 `POST /api/test/say-time`) or on the hour together with the chime. Rather than ship a clip for every minute of the day,
 the pack carries about thirty small words and the firmware strings them together: "It is" plus the hour, the minutes and
 AM or PM, following the 12- or 24-hour setting. So "it is three fifteen P M" is four clips played as one utterance.
 
 ## Hourly chime
 
-The Audio tab can chime on the hour. Three variations: a single chime, the hour **struck** one to twelve times at about
+The Sound & Notify tab can chime on the hour. Three variations: a single chime, the hour **struck** one to twelve times at about
 one beat a second, and an extra single chime on the half hour. Any of the fourteen sounds can be the hourly one, the
 doorbell by default, and the spoken time can follow it. Quiet hours silence all of it, so it will not wake you, and it
 stays quiet while an alarm is ringing or snoozed.
@@ -592,14 +590,14 @@ The voice is not synthesized on the ESP32. A GitHub Actions step renders every p
 recordings), stores the clips as 8-bit µ-law (clean enough that the small speaker, not the codec, is the limit) and
 publishes them as a ~4 MB *voice pack* next to the firmware. When
 speech is enabled the clock downloads the pack over HTTPS into its own flash file system, verifies the MD5 from the
-manifest and keeps it across firmware updates; a new pack is fetched only when its version changes. The Audio tab
+manifest and keeps it across firmware updates; a new pack is fetched only when its version changes. The Sound & Notify tab
 shows the installed pack, has a "Download voice pack" button and a phrase picker to hear any clip, and
 `POST /api/test/say {"text": "Tornado Warning"}` does the same from a script. To rebuild the pack yourself, or with
 another Piper voice, run `tools/make_voice_pack.py` (see its header for the file format).
 
 ## Pushbullet
 
-Notify tab: paste an access token from Pushbullet's account settings. The clock registers itself as a device named
+Sound & Notify tab: paste an access token from Pushbullet's account settings. The clock registers itself as a device named
 "Matrix Weather Clock" and then pushes a note to your phone for new NWS alerts at or above the chosen severity, for the first
 lightning strike of a storm (and at most every five minutes after that), and optionally for alarms. With "show pushes"
 on it also polls your account and scrolls any push sent to all devices or to the clock: pick "Matrix Weather Clock" in the
@@ -608,7 +606,7 @@ phone app, or use IFTTT / Home Assistant / `curl` against the Pushbullet API. Pu
 
 ## Webhook
 
-The Notify tab can also post a small JSON object to any URL when something happens, which covers everything Pushbullet
+The Sound & Notify tab can also post a small JSON object to any URL when something happens, which covers everything Pushbullet
 does without an account. Pick the events you want (weather alerts above a severity, nearby lightning, alarms and
 timers, poor indoor air) and give a URL. The body looks like this:
 
@@ -625,7 +623,7 @@ a second attempt.
 ## Remote control
 
 **Infrared.** Solder or plug a VS1838B / TSOP38238 receiver module to the bottom header: OUT to the **RX0** pad
-(GPIO 44, free because the console runs over USB), VCC to 3V3, GND to GND. The Remote tab lists actions; press
+(GPIO 44, free because the console runs over USB), VCC to 3V3, GND to GND. The Hardware tab lists actions; press
 *Learn* on a row, then a key on the remote, and its code fills in. NEC remotes (the tiny 21-key Arduino remotes,
 most TV and set-top box remotes) decode to their standard 32-bit code; anything else is recognised by a fingerprint of
 its timing, so it can still be learned. Holding a key repeats only the brightness actions. Up to 24 keys can be mapped.
@@ -662,9 +660,9 @@ is safe even if the source is not set up.
 
 The ultraviolet index, cloud cover, visibility and rainfall come from the weather request that was already being made,
 so they cost nothing extra. Sea temperature is a second small request to the same NOAA station as the tides, and can be
-switched off on the Location & Weather tab.
+switched off on the Weather tab.
 
-**Countdowns.** Up to three dates on the Alarms tab, each with a label. Tick *every year* for a birthday or anniversary
+**Countdowns.** Up to three dates on the Clock & Alarms tab, each with a label. Tick *every year* for a birthday or anniversary
 and it rolls forward once the day has passed; leave it clear and give a full date for a one-off.
 
 **Colour themes.** The Colours card offers eight palettes -- Default, Mono, Amber, Ocean, Sunset, Forest, Neon and a
@@ -684,7 +682,7 @@ your own dates reads as your usual panel with those two lines recoloured, not as
 
 **Date format.** The date page can read month-first (`SEP 27`), day-first (`27 SEP`) or numeric (`09-27`).
 
-**Two networks and a static address.** The WiFi tab takes a second SSID and password; the clock alternates between the
+**Two networks and a static address.** The System tab takes a second SSID and password; the clock alternates between the
 two while it retries, and falls back to the setup access point only when neither answers. Untick *automatic address* to
 set an IP, gateway, netmask and DNS server instead of using DHCP. A static address takes effect on the next connection,
 so save and let the clock reconnect.
@@ -710,19 +708,19 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweat
 
 | Symptom | What to try |
 |---|---|
-| Panel stays dark | Panel tab: driver `FM6126A`, then `ICN2038S`; save and reboot |
+| Panel stays dark | Hardware tab: driver `FM6126A`, then `ICN2038S`; save and reboot |
 | Colours washed out / pastel | driver `FM6124` |
 | Ghost columns, smeared pixels | latch blanking 3-4, clock phase off |
 | Flicker | minimum refresh 150 Hz or higher, or colour depth 6 |
 | Red and blue swapped | *Swap red/blue* |
 | Leftmost column missing, stray pixels bottom right, image shifted one pixel | clock phase off (the default) or on |
 | Board resets when the panel goes bright | panel power supply too weak; lower *Max brightness cap* |
-| WiFi weak while the panel runs | raise TX power on the WiFi tab, route the ribbon cable away from the antenna |
+| WiFi weak while the panel runs | raise TX power on the System tab, route the ribbon cable away from the antenna |
 | No chime | Status tab shows whether the ES8311 was found; check volume, quiet hours, speaker connector |
 | Radar never appears | Status tab → System shows the radar state; it needs internet, a US location and about 20 s after WiFi for the first eleven frames; "NO RADAR" on the panel means no frames yet |
 | Indoor sensor "not detected" | the Status tab's Indoor card lists the I2C addresses seen and has a *Scan again* button; a BME280/BME680 answers at 0x76 or 0x77. Use the 4-pin connector on the left edge (3V3 GND IO1 IO2), SDA to IO1, SCL to IO2, wired by label (Qwiic cables have GND and 3V3 the other way round). The clock also looks for a sensor every 30 s, so no reboot is needed |
 | Sensor pressure is far off (1100+ hPa) or gas never becomes valid | update to 0.13.1 or later: it reads the BME680's pressure calibration correctly and drives the BME688 (which most "BME680" modules are today) through its own gas registers |
-| Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Location & Weather tab |
+| Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Hardware tab |
 | Sounds are fuzzy or distorted | Volume 100 % is the codec's full scale; the small speaker distorts near the top, so try 50-70 %. Firmware before 0.5.1 applied digital gain above 75 %, which clipped: update |
 | A page in the rotation never shows | sensor and tide pages appear only while their data exists; the panel skips them otherwise |
 | Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 4 MB of free flash), check `/api/log` for `voice:` lines |
@@ -730,10 +728,10 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweat
 | C3 mini TV screen white | The chip is in download mode (during or after an upload) and nothing drives the screen: tap reset |
 | C3 mini TV screen black but lit | It is in standby: press any key. The backlight cannot be switched off from software |
 | Xbox page never appears | the Status tab's Xbox card shows the last error: *API key refused* (copy the key from xbl.io again), *gamertag not found* (check the spelling), *rate limited* (more than 150 requests an hour on that key, often from several clocks sharing it); `/api/log` prints `xbox:` lines |
-| Two clocks, one address | both still use the hostname `matrixweatherclock`: rename one on the WiFi tab (see *Several clocks*) |
+| Two clocks, one address | both still use the hostname `matrixweatherclock`: rename one on the System tab (see *Several clocks*) |
 
 If a panel setting makes the board reset repeatedly, the firmware restores the panel defaults automatically after
-three quick resets. To wipe everything (including WiFi): Factory reset on the WiFi tab, or `pio run -t erase`.
+three quick resets. To wipe everything (including WiFi): Factory reset on the System tab, or `pio run -t erase`.
 
 More detail: [docs/hardware.md](docs/hardware.md) (pins, panel notes, test pattern),
 [docs/testing.md](docs/testing.md) (bring-up checklist with commands).
